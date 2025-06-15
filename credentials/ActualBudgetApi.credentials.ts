@@ -4,9 +4,9 @@ import {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class ActualBudget implements ICredentialType {
-	name = 'actualBudget';
-	displayName = 'Actual Budget';
+export class ActualBudgetApi implements ICredentialType {
+	name = 'actualBudgetApi';
+	displayName = 'Actual Budget API';
 	documentationUrl = 'https://actualbudget.org/docs/api/';
 	properties: INodeProperties[] = [
 		{

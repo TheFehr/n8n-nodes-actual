@@ -30,7 +30,7 @@ export class ActualBudget implements INodeType {
 		outputs: [NodeConnectionType.Main],
 		credentials: [
 			{
-				name: 'actualBudget',
+				name: 'actualBudgetApi',
 				required: true,
 			},
 		],
@@ -89,7 +89,7 @@ export class ActualBudget implements INodeType {
 				filter?: string,
 				paginationToken?: string,
 			): Promise<INodeListSearchResult> {
-				const auth = (await this.getCredentials('actualBudget', 0)) as Credentials;
+				const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
 				const actual = await initializeActualBudget(auth);
 
 				let budgets = actual.getBudgets();
@@ -108,7 +108,6 @@ export class ActualBudget implements INodeType {
 						name: budget.name,
 						value: budget.cloudFileId,
 						url: '',
-						description: '',
 					})),
 				};
 			},
@@ -120,7 +119,7 @@ export class ActualBudget implements INodeType {
 		const returnData = [];
 
 		const action = this.getNodeParameter('operation', 0) as string;
-		const auth = (await this.getCredentials('actualBudget', 0)) as Credentials;
+		const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
 		const actual = await initializeActualBudget(auth);
 
 		const budgetId = this.getNodeParameter('budgetId', 0) as string;
