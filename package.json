@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-actual",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interact with your Actual Budget instance",
   "keywords": [
     "n8n-community-node-package"
@@ -29,7 +29,7 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/ActualBudget.credentials.js"
+      "dist/credentials/ActualBudgetApi.credentials.js"
     ],
     "nodes": [
       "dist/nodes/ActualBudget/ActualBudget.node.js"
