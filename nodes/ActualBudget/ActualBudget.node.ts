@@ -6,7 +6,7 @@ import {
 	INodeListSearchResult,
 	INodeType,
 	INodeTypeDescription,
-	NodeConnectionType,
+	NodeConnectionTypes,
 } from 'n8n-workflow';
 
 interface Credentials {
@@ -26,8 +26,8 @@ export class ActualBudget implements INodeType {
 		defaults: {
 			name: 'ActualBudget',
 		},
-		inputs: [NodeConnectionType.Main],
-		outputs: [NodeConnectionType.Main],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'actualBudgetApi',
