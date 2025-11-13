@@ -6,10 +6,32 @@ This project is a community-built n8n node for [Actual Budget](https://actualbud
 
 ### Key Technologies
 
-*   **n8n:** A fair-code licensed workflow automation platform. For more details, refer to the [n8n community nodes documentation](https://docs.n8n.io/integrations/).
+*   **n8n:** A fair-code licensed workflow automation platform. For more details, refer to the [n8n community nodes documentation](httpss://docs.n8n.io/integrations/).
 *   **TypeScript:** The programming language used to build the node.
 *   **Node.js:** The runtime environment for the node.
-*   **@actual-app/api:** The official API library for Actual Budget. For more details, refer to the [Actual Budget API Documentation](https://actualbudget.org/docs/api/).
+*   **@actual-app/api:** The official API library for Actual Budget. For more details, refer to the [Actual Budget API Documentation](httpss://actualbudget.org/docs/api/).
+
+### Latest Documentation
+
+To get the latest documentation for the key technologies used in this project, you can use the `context7` tool.
+
+*   **For n8n:**
+    ```
+    /context7 resolve-library-id --libraryName n8n
+    ```
+    Then use the returned `context7CompatibleLibraryID` to get the documentation:
+    ```
+    /context7 get-library-docs --context7CompatibleLibraryID <id>
+    ```
+
+*   **For @actual-app/api:**
+    ```
+    /context7 resolve-library-id --libraryName @actual-app/api
+    ```
+    Then use the returned `context7CompatibleLibraryID` to get the documentation:
+    ```
+    /context7 get-library-docs --context7CompatibleLibraryID <id>
+    ```
 
 ### Architecture
 

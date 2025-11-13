@@ -1,30 +1,25 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import {
-	IDataObject,
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
-	INodeExecutionData,
-	INodeListSearchResult,
 	INodeType,
 	INodeTypeDescription,
 	NodeConnectionTypes,
+	INodePropertyOptions,
+	IHookFunctions, // Added for getDataLocation
+	NodeApiError,
 } from 'n8n-workflow';
 
 import * as api from '@actual-app/api';
 
-interface Credentials {
-	url: string;
-	password: string;
-}
-
 export class ActualBudget implements INodeType {
-	private async initApiClient(this: IExecuteFunctions | ILoadOptionsFunctions) {
+	static async initApiClient(this: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions) {
 		const credentials = await this.getCredentials('actualBudgetApi');
-		const { serverURL, password } = credentials;
-		const dataDir = `${this.getNode().context.global.n8n.homePath}.n8n/actual-data/${crypto
+		const { serverURL, password } = credentials as { serverURL: string; password: string };
+		const dataDir = `${process.env.N8N_USER_FOLDER}/actual-data/${crypto
 			.createHash('md5')
-			.update(serverURL as string)
+			.update(serverURL)
 			.digest('hex')}`;
 
 		if (!fs.existsSync(dataDir)) {
@@ -33,18 +28,16 @@ export class ActualBudget implements INodeType {
 
 		try {
 			await api.init({
-				serverURL: serverURL as string,
-				password: password as string,
+				serverURL,
+				password,
 				dataDir,
 			});
 		} catch (e) {
-			throw new Error(
-				`Failed to initialize Actual Budget API client: ${(e as Error).message}`,
-			);
+			throw new NodeApiError(this.getNode(), { message: (e as Error).message });
 		}
 	}
 
-	private async shutdownApiClient() {
+	static async shutdownApiClient(this: IExecuteFunctions | ILoadOptionsFunctions | IHookFunctions) {
 		try {
 			await api.shutdown();
 		} catch (e) {
@@ -145,9 +138,9 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
-						value: 'getAll',
-						action: 'Get all accounts',
+						name: 'Close',
+						value: 'close',
+						action: 'Close an account',
 					},
 					{
 						name: 'Create',
@@ -155,19 +148,19 @@ export class ActualBudget implements INodeType {
 						action: 'Create an account',
 					},
 					{
+						name: 'Delete',
+						value: 'delete',
+						action: 'Delete an account',
+					},
+					{
 						name: 'Get Balance',
 						value: 'getBalance',
 						action: 'Get account balance',
 					},
 					{
-						name: 'Update',
-						value: 'update',
-						action: 'Update an account',
-					},
-					{
-						name: 'Close',
-						value: 'close',
-						action: 'Close an account',
+						name: 'Get Many',
+						value: 'getAll',
+						action: 'Get many accounts',
 					},
 					{
 						name: 'Reopen',
@@ -175,22 +168,22 @@ export class ActualBudget implements INodeType {
 						action: 'Reopen an account',
 					},
 					{
-						name: 'Delete',
-						value: 'delete',
-						action: 'Delete an account',
+						name: 'Update',
+						value: 'update',
+						action: 'Update an account',
 					},
 				],
 				default: 'getAll',
 			},
 			{
-				displayName: 'Account ID',
+				displayName: 'Account Name or ID',
 				name: 'accountId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getAccounts',
 				},
 				default: '',
-				description: 'The ID of the account to operate on.',
+				description: 'The ID of the account to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -203,7 +196,7 @@ export class ActualBudget implements INodeType {
 				name: 'name',
 				type: 'string',
 				default: '',
-				description: 'The name of the account.',
+				description: 'The name of the account',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -217,20 +210,20 @@ export class ActualBudget implements INodeType {
 				type: 'options',
 				options: [
 					{
-						name: 'Checking',
-						value: 'checking',
-					},
-					{
-						name: 'Savings',
-						value: 'savings',
-					},
-					{
 						name: 'Cash',
 						value: 'cash',
 					},
 					{
+						name: 'Checking',
+						value: 'checking',
+					},
+					{
 						name: 'Credit Card',
 						value: 'creditCard',
+					},
+					{
+						name: 'Investment',
+						value: 'investment',
 					},
 					{
 						name: 'Line of Credit',
@@ -245,16 +238,16 @@ export class ActualBudget implements INodeType {
 						value: 'mortgage',
 					},
 					{
-						name: 'Investment',
-						value: 'investment',
-					},
-					{
 						name: 'Other',
 						value: 'other',
 					},
+					{
+						name: 'Savings',
+						value: 'savings',
+					},
 				],
 				default: 'checking',
-				description: 'The type of the account.',
+				description: 'The type of the account',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -267,7 +260,7 @@ export class ActualBudget implements INodeType {
 				name: 'offbudget',
 				type: 'boolean',
 				default: false,
-				description: 'Whether the account is off-budget.',
+				description: 'Whether the account is off-budget',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -280,7 +273,7 @@ export class ActualBudget implements INodeType {
 				name: 'fints',
 				type: 'boolean',
 				default: false,
-				description: 'Whether the account uses FinTS.',
+				description: 'Whether the account uses FinTS',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -293,7 +286,7 @@ export class ActualBudget implements INodeType {
 				name: 'closed',
 				type: 'boolean',
 				default: false,
-				description: 'Whether the account is closed.',
+				description: 'Whether the account is closed',
 				displayOptions: {
 					show: {
 						resource: ['account'],
@@ -313,14 +306,39 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get Months',
-						value: 'getMonths',
-						action: 'Get budget months',
+						name: 'Batch Updates',
+						value: 'batchUpdates',
+						action: 'Batch budget updates',
+					},
+					{
+						name: 'Download',
+						value: 'download',
+						action: 'Download budget',
 					},
 					{
 						name: 'Get Month',
 						value: 'getMonth',
 						action: 'Get budget month',
+					},
+					{
+						name: 'Get Months',
+						value: 'getMonths',
+						action: 'Get budget months',
+					},
+					{
+						name: 'Hold For Next Month',
+						value: 'holdForNextMonth',
+						action: 'Hold budget for next month',
+					},
+					{
+						name: 'Load',
+						value: 'load',
+						action: 'Load budget',
+					},
+					{
+						name: 'Reset Hold',
+						value: 'resetHold',
+						action: 'Reset budget hold',
 					},
 					{
 						name: 'Set Amount',
@@ -332,31 +350,6 @@ export class ActualBudget implements INodeType {
 						value: 'setCarryover',
 						action: 'Set budget carryover',
 					},
-					{
-						name: 'Hold For Next Month',
-						value: 'holdForNextMonth',
-						action: 'Hold budget for next month',
-					},
-					{
-						name: 'Reset Hold',
-						value: 'resetHold',
-						action: 'Reset budget hold',
-					},
-					{
-						name: 'Load',
-						value: 'load',
-						action: 'Load budget',
-					},
-					{
-						name: 'Download',
-						value: 'download',
-						action: 'Download budget',
-					},
-					{
-						name: 'Batch Updates',
-						value: 'batchUpdates',
-						action: 'Batch budget updates',
-					},
 				],
 				default: 'getMonths',
 			},
@@ -365,7 +358,7 @@ export class ActualBudget implements INodeType {
 				name: 'month',
 				type: 'string',
 				default: '',
-				description: 'The month to operate on (YYYY-MM-DD format).',
+				description: 'The month to operate on (YYYY-MM-DD format)',
 				displayOptions: {
 					show: {
 						resource: ['budget'],
@@ -374,14 +367,14 @@ export class ActualBudget implements INodeType {
 				},
 			},
 			{
-				displayName: 'Category ID',
+				displayName: 'Category Name or ID',
 				name: 'categoryId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getCategories',
 				},
 				default: '',
-				description: 'The ID of the category to operate on.',
+				description: 'The ID of the category to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['budget'],
@@ -394,7 +387,7 @@ export class ActualBudget implements INodeType {
 				name: 'amount',
 				type: 'number',
 				default: 0,
-				description: 'The amount to set for the category in cents.',
+				description: 'The amount to set for the category in cents',
 				displayOptions: {
 					show: {
 						resource: ['budget'],
@@ -407,7 +400,7 @@ export class ActualBudget implements INodeType {
 				name: 'carryover',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to carryover the budget.',
+				description: 'Whether to carryover the budget',
 				displayOptions: {
 					show: {
 						resource: ['budget'],
@@ -420,7 +413,7 @@ export class ActualBudget implements INodeType {
 				name: 'updates',
 				type: 'json',
 				default: '[]',
-				description: 'JSON array of budget updates.',
+				description: 'JSON array of budget updates',
 				displayOptions: {
 					show: {
 						resource: ['budget'],
@@ -440,9 +433,9 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
+						name: 'Get Many',
 						value: 'getAll',
-						action: 'Get all categories',
+						action: 'Get many categories',
 					},
 					{
 						name: 'Create',
@@ -463,14 +456,14 @@ export class ActualBudget implements INodeType {
 				default: 'getAll',
 			},
 			{
-				displayName: 'Category ID',
+				displayName: 'Category Name or ID',
 				name: 'categoryId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getCategories',
 				},
 				default: '',
-				description: 'The ID of the category to operate on.',
+				description: 'The ID of the category to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['category'],
@@ -483,7 +476,7 @@ export class ActualBudget implements INodeType {
 				name: 'name',
 				type: 'string',
 				default: '',
-				description: 'The name of the category.',
+				description: 'The name of the category',
 				displayOptions: {
 					show: {
 						resource: ['category'],
@@ -492,14 +485,14 @@ export class ActualBudget implements INodeType {
 				},
 			},
 			{
-				displayName: 'Category Group ID',
+				displayName: 'Category Group Name or ID',
 				name: 'categoryGroupId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getCategoryGroups',
 				},
 				default: '',
-				description: 'The ID of the category group the category belongs to.',
+				description: 'The ID of the category group the category belongs to. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['category'],
@@ -519,9 +512,9 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
+						name: 'Get Many',
 						value: 'getAll',
-						action: 'Get all category groups',
+						action: 'Get many category groups',
 					},
 					{
 						name: 'Create',
@@ -542,14 +535,14 @@ export class ActualBudget implements INodeType {
 				default: 'getAll',
 			},
 			{
-				displayName: 'Category Group ID',
+				displayName: 'Category Group Name or ID',
 				name: 'categoryGroupId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getCategoryGroups',
 				},
 				default: '',
-				description: 'The ID of the category group to operate on.',
+				description: 'The ID of the category group to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['categoryGroup'],
@@ -562,7 +555,7 @@ export class ActualBudget implements INodeType {
 				name: 'name',
 				type: 'string',
 				default: '',
-				description: 'The name of the category group.',
+				description: 'The name of the category group',
 				displayOptions: {
 					show: {
 						resource: ['categoryGroup'],
@@ -582,19 +575,9 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
-						value: 'getAll',
-						action: 'Get all payees',
-					},
-					{
 						name: 'Create',
 						value: 'create',
 						action: 'Create a payee',
-					},
-					{
-						name: 'Update',
-						value: 'update',
-						action: 'Update a payee',
 					},
 					{
 						name: 'Delete',
@@ -602,27 +585,37 @@ export class ActualBudget implements INodeType {
 						action: 'Delete a payee',
 					},
 					{
-						name: 'Merge',
-						value: 'merge',
-						action: 'Merge payees',
+						name: 'Get Many',
+						value: 'getAll',
+						action: 'Get many payees',
 					},
 					{
 						name: 'Get Rules',
 						value: 'getRules',
 						action: 'Get payee rules',
 					},
+					{
+						name: 'Merge',
+						value: 'merge',
+						action: 'Merge payees',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						action: 'Update a payee',
+					},
 				],
 				default: 'getAll',
 			},
 			{
-				displayName: 'Payee ID',
+				displayName: 'Payee Name or ID',
 				name: 'payeeId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getPayees',
 				},
 				default: '',
-				description: 'The ID of the payee to operate on.',
+				description: 'The ID of the payee to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['payee'],
@@ -635,7 +628,7 @@ export class ActualBudget implements INodeType {
 				name: 'name',
 				type: 'string',
 				default: '',
-				description: 'The name of the payee.',
+				description: 'The name of the payee',
 				displayOptions: {
 					show: {
 						resource: ['payee'],
@@ -644,14 +637,14 @@ export class ActualBudget implements INodeType {
 				},
 			},
 			{
-				displayName: 'Transfer Account ID',
+				displayName: 'Transfer Account Name or ID',
 				name: 'transferAccountId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getAccounts',
 				},
 				default: '',
-				description: 'The ID of the transfer account (only for transfer payees).',
+				description: 'The ID of the transfer account (only for transfer payees). Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['payee'],
@@ -660,14 +653,14 @@ export class ActualBudget implements INodeType {
 				},
 			},
 			{
-				displayName: 'Target Payee ID',
+				displayName: 'Target Payee Name or ID',
 				name: 'targetPayeeId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getPayees',
 				},
 				default: '',
-				description: 'The ID of the target payee to merge into.',
+				description: 'The ID of the target payee to merge into. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['payee'],
@@ -687,9 +680,9 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
+						name: 'Get Many',
 						value: 'getAll',
-						action: 'Get all rules',
+						action: 'Get many rules',
 					},
 					{
 						name: 'Create',
@@ -710,14 +703,14 @@ export class ActualBudget implements INodeType {
 				default: 'getAll',
 			},
 			{
-				displayName: 'Rule ID',
+				displayName: 'Rule Name or ID',
 				name: 'ruleId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getRules',
 				},
 				default: '',
-				description: 'The ID of the rule to operate on.',
+				description: 'The ID of the rule to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['rule'],
@@ -740,7 +733,7 @@ export class ActualBudget implements INodeType {
 					},
 				],
 				default: 'pre',
-				description: 'When the rule should be applied (null for default stage).',
+				description: 'When the rule should be applied (null for default stage)',
 				displayOptions: {
 					show: {
 						resource: ['rule'],
@@ -753,7 +746,7 @@ export class ActualBudget implements INodeType {
 				name: 'conditions',
 				type: 'json',
 				default: '[]',
-				description: 'JSON array of conditions for the rule to apply.',
+				description: 'JSON array of conditions for the rule to apply',
 				displayOptions: {
 					show: {
 						resource: ['rule'],
@@ -766,7 +759,7 @@ export class ActualBudget implements INodeType {
 				name: 'actions',
 				type: 'json',
 				default: '[]',
-				description: 'JSON array of actions of the applied rule.',
+				description: 'JSON array of actions of the applied rule',
 				displayOptions: {
 					show: {
 						resource: ['rule'],
@@ -789,7 +782,7 @@ export class ActualBudget implements INodeType {
 					},
 				],
 				default: 'and',
-				description: 'How to combine conditions.',
+				description: 'How to combine conditions',
 				displayOptions: {
 					show: {
 						resource: ['rule'],
@@ -809,9 +802,9 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
+						name: 'Get Many',
 						value: 'getAll',
-						action: 'Get all schedules',
+						action: 'Get many schedules',
 					},
 					{
 						name: 'Create',
@@ -832,14 +825,14 @@ export class ActualBudget implements INodeType {
 				default: 'getAll',
 			},
 			{
-				displayName: 'Schedule ID',
+				displayName: 'Schedule Name or ID',
 				name: 'scheduleId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getSchedules',
 				},
 				default: '',
-				description: 'The ID of the schedule to operate on.',
+				description: 'The ID of the schedule to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['schedule'],
@@ -852,7 +845,7 @@ export class ActualBudget implements INodeType {
 				name: 'scheduleDetails',
 				type: 'json',
 				default: '{}',
-				description: 'JSON object containing schedule details.',
+				description: 'JSON object containing schedule details',
 				displayOptions: {
 					show: {
 						resource: ['schedule'],
@@ -872,14 +865,19 @@ export class ActualBudget implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get All',
-						value: 'getAll',
-						action: 'Get all transactions',
-					},
-					{
 						name: 'Add',
 						value: 'add',
 						action: 'Add transactions',
+					},
+					{
+						name: 'Delete',
+						value: 'delete',
+						action: 'Delete a transaction',
+					},
+					{
+						name: 'Get Many',
+						value: 'getAll',
+						action: 'Get many transactions',
 					},
 					{
 						name: 'Import',
@@ -891,23 +889,18 @@ export class ActualBudget implements INodeType {
 						value: 'update',
 						action: 'Update a transaction',
 					},
-					{
-						name: 'Delete',
-						value: 'delete',
-						action: 'Delete a transaction',
-					},
 				],
 				default: 'getAll',
 			},
 			{
-				displayName: 'Account ID',
+				displayName: 'Account Name or ID',
 				name: 'accountId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getAccounts',
 				},
 				default: '',
-				description: 'The ID of the account to operate on.',
+				description: 'The ID of the account to operate on. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -920,7 +913,7 @@ export class ActualBudget implements INodeType {
 				name: 'transactionId',
 				type: 'string',
 				default: '',
-				description: 'The ID of the transaction to operate on.',
+				description: 'The ID of the transaction to operate on',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -933,7 +926,7 @@ export class ActualBudget implements INodeType {
 				name: 'payeeName',
 				type: 'string',
 				default: '',
-				description: 'Filter transactions by payee name.',
+				description: 'Filter transactions by payee name',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -946,7 +939,7 @@ export class ActualBudget implements INodeType {
 				name: 'categoryName',
 				type: 'string',
 				default: '',
-				description: 'Filter transactions by category name.',
+				description: 'Filter transactions by category name',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -959,7 +952,7 @@ export class ActualBudget implements INodeType {
 				name: 'startDate',
 				type: 'string',
 				default: '',
-				description: 'Filter transactions by start date (YYYY-MM-DD).',
+				description: 'Filter transactions by start date (YYYY-MM-DD)',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -972,7 +965,7 @@ export class ActualBudget implements INodeType {
 				name: 'endDate',
 				type: 'string',
 				default: '',
-				description: 'Filter transactions by end date (YYYY-MM-DD).',
+				description: 'Filter transactions by end date (YYYY-MM-DD)',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -985,7 +978,7 @@ export class ActualBudget implements INodeType {
 				name: 'minAmount',
 				type: 'number',
 				default: 0,
-				description: 'Filter transactions by minimum amount (in cents).',
+				description: 'Filter transactions by minimum amount (in cents)',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -998,7 +991,7 @@ export class ActualBudget implements INodeType {
 				name: 'maxAmount',
 				type: 'number',
 				default: 0,
-				description: 'Filter transactions by maximum amount (in cents).',
+				description: 'Filter transactions by maximum amount (in cents)',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1010,8 +1003,11 @@ export class ActualBudget implements INodeType {
 				displayName: 'Limit',
 				name: 'limit',
 				type: 'number',
-				default: 100,
-				description: 'Maximum number of transactions to return.',
+				typeOptions: {
+					minValue: 1,
+				},
+				default: 50,
+				description: 'Max number of results to return',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1024,7 +1020,7 @@ export class ActualBudget implements INodeType {
 				name: 'transactions',
 				type: 'json',
 				default: '[]',
-				description: 'JSON array of transactions to add or import.',
+				description: 'JSON array of transactions to add or import',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1033,14 +1029,14 @@ export class ActualBudget implements INodeType {
 				},
 			},
 			{
-				displayName: 'Payee ID',
+				displayName: 'Payee Name or ID',
 				name: 'payeeId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getPayees',
 				},
 				default: '',
-				description: 'The ID of the payee for the transaction.',
+				description: 'The ID of the payee for the transaction. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1049,14 +1045,14 @@ export class ActualBudget implements INodeType {
 				},
 			},
 			{
-				displayName: 'Category ID',
+				displayName: 'Category Name or ID',
 				name: 'categoryId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getCategories',
 				},
 				default: '',
-				description: 'The ID of the category for the transaction.',
+				description: 'The ID of the category for the transaction. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1069,7 +1065,7 @@ export class ActualBudget implements INodeType {
 				name: 'notes',
 				type: 'string',
 				default: '',
-				description: 'Notes for the transaction.',
+				description: 'Notes for the transaction',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1082,7 +1078,7 @@ export class ActualBudget implements INodeType {
 				name: 'amount',
 				type: 'number',
 				default: 0,
-				description: 'Amount of the transaction (in cents).',
+				description: 'Amount of the transaction (in cents)',
 				displayOptions: {
 					show: {
 						resource: ['transaction'],
@@ -1125,14 +1121,14 @@ export class ActualBudget implements INodeType {
 				default: 'sync',
 			},
 			{
-				displayName: 'Account ID',
+				displayName: 'Account Name or ID',
 				name: 'accountId',
 				type: 'options',
 				typeOptions: {
 					loadOptionsMethod: 'getAccounts',
 				},
 				default: '',
-				description: 'The ID of the account to run bank sync for.',
+				description: 'The ID of the account to run bank sync for. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						resource: ['utility'],
@@ -1145,7 +1141,7 @@ export class ActualBudget implements INodeType {
 				name: 'query',
 				type: 'string',
 				default: '',
-				description: 'The query to run.',
+				description: 'The query to run',
 				displayOptions: {
 					show: {
 						resource: ['utility'],
@@ -1176,7 +1172,7 @@ export class ActualBudget implements INodeType {
 					},
 				],
 				default: 'account',
-				description: 'The type of entity to get ID for.',
+				description: 'The type of entity to get ID for',
 				displayOptions: {
 					show: {
 						resource: ['utility'],
@@ -1189,7 +1185,7 @@ export class ActualBudget implements INodeType {
 				name: 'name',
 				type: 'string',
 				default: '',
-				description: 'The name of the entity to get ID for.',
+				description: 'The name of the entity to get ID for',
 				displayOptions: {
 					show: {
 						resource: ['utility'],
@@ -1198,5 +1194,91 @@ export class ActualBudget implements INodeType {
 				},
 			},
 		],
+	};
+
+	methods = {
+		loadOptions: {
+			async getAccounts(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				await ActualBudget.initApiClient.call(this);
+				try {
+					const accounts = await api.getAccounts();
+					          return accounts.map((account) => ({
+					            name: account.name,
+					            value: account.id,
+					          }));
+					        } catch (error) {
+					          throw new NodeApiError(this.getNode(), { message: (error as Error).message });
+					        } finally {					await ActualBudget.shutdownApiClient.call(this);
+				}
+			},
+						async getCategories(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+							await ActualBudget.initApiClient.call(this);
+							try {
+								const categories = await api.getCategories();
+								return categories.map((category) => ({
+									name: category.name,
+									value: category.id,
+								}));
+							} catch (error) {
+								throw new NodeApiError(this.getNode(), { message: (error as Error).message });
+							} finally {
+								await ActualBudget.shutdownApiClient.call(this);
+							}
+						},
+			async getCategoryGroups(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				await ActualBudget.initApiClient.call(this);
+				try {
+					const categoryGroups = await api.getCategoryGroups();
+					return categoryGroups.map((categoryGroup) => ({
+						name: categoryGroup.name,
+						value: categoryGroup.id,
+					}));
+				} catch (error) {
+					throw new NodeApiError(this.getNode(), { message: (error as Error).message });
+				} finally {
+					await ActualBudget.shutdownApiClient.call(this);
+				}
+			},
+			async getPayees(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				await ActualBudget.initApiClient.call(this);
+				try {
+					const payees = await api.getPayees();
+					          return payees.map((payee) => ({
+					            name: payee.name,
+					            value: payee.id,
+					          }));
+					        } catch (error) {
+					          throw new NodeApiError(this.getNode(), { message: (error as Error).message });
+					        } finally {					await ActualBudget.shutdownApiClient.call(this);
+				}
+			},
+			async getRules(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				await ActualBudget.initApiClient.call(this);
+				try {
+					const rules = await api.getRules();
+					                    return rules.map((rule) => ({
+					                        name: rule.id, // Rules don't have a name, using ID for now
+					                        value: rule.id,
+					                    }));
+					                } catch (error) {
+					                    throw new NodeApiError(this.getNode(), { message: (error as Error).message });
+					                } finally {					await ActualBudget.shutdownApiClient.call(this);
+				}
+			},
+			async getSchedules(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				await ActualBudget.initApiClient.call(this);
+				try {
+					const schedules = await api.getSchedules();
+					return schedules.map((schedule) => ({
+						name: schedule.id, // Schedules don't have a name, using ID for now
+						value: schedule.id,
+					}));
+				} catch (error) {
+					throw new NodeApiError(this.getNode(), { message: (error as Error).message });
+				} finally {
+					await ActualBudget.shutdownApiClient.call(this);
+				}
+			},
+		},
 	};
 }
