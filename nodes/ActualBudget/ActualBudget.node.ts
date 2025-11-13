@@ -11,12 +11,48 @@ import {
 	NodeConnectionTypes,
 } from 'n8n-workflow';
 
+import * as api from '@actual-app/api';
+
 interface Credentials {
 	url: string;
 	password: string;
 }
 
 export class ActualBudget implements INodeType {
+	private async initApiClient(this: IExecuteFunctions | ILoadOptionsFunctions) {
+		const credentials = await this.getCredentials('actualBudgetApi');
+		const { serverURL, password } = credentials;
+		const dataDir = `${this.getNode().context.global.n8n.homePath}.n8n/actual-data/${crypto
+			.createHash('md5')
+			.update(serverURL as string)
+			.digest('hex')}`;
+
+		if (!fs.existsSync(dataDir)) {
+			fs.mkdirSync(dataDir, { recursive: true });
+		}
+
+		try {
+			await api.init({
+				serverURL: serverURL as string,
+				password: password as string,
+				dataDir,
+			});
+		} catch (e) {
+			throw new Error(
+				`Failed to initialize Actual Budget API client: ${(e as Error).message}`,
+			);
+		}
+	}
+
+	private async shutdownApiClient() {
+		try {
+			await api.shutdown();
+		} catch (e) {
+			// eslint-disable-next-line n8n-nodes-base/node-param-display-name-miscased
+			console.error('Failed to shutdown Actual Budget API client:', e);
+		}
+	}
+
 	description: INodeTypeDescription = {
 		displayName: 'ActualBudget',
 		name: 'actualBudget',
