@@ -54,15 +54,15 @@ export class ActualBudget implements INodeType {
 	}
 
 	description: INodeTypeDescription = {
-		displayName: 'ActualBudget',
+		displayName: 'Actual Budget',
 		name: 'actualBudget',
 		icon: 'file:actualbudget.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + " " + $parameter["resource"]}}',
-		description: 'Consume ActualBudget API',
+		description: 'Interact with your Actual Budget instance',
 		defaults: {
-			name: 'ActualBudget',
+			name: 'Actual Budget',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],

@@ -12,36 +12,36 @@ To ensure a structured and validated development process, the AI should adhere t
 
 ## Phase I: Project Configuration and Setup
 
-- [ ] **Task 1: Finalize `package.json`**
-    - [ ] Add `@actual-app/api` to `dependencies`.
-    - [ ] Verify `n8n.n8nNodesApiVersion` is set correctly.
-    - [ ] Update `n8n.credentials` path to `dist/credentials/ActualBudgetApi.credentials.js`.
-    - [ ] Update `n8n.nodes` path to `dist/nodes/ActualBudget/ActualBudget.node.js`.
-    - [ ] Add `n8n-community-node-package` to `keywords`.
-    - [ ] Update `repository.url` and `author` details.
+- [x] **Task 1: Finalize `package.json`**
+    - [x] Add `@actual-app/api` to `dependencies`.
+    - [x] Verify `n8n.n8nNodesApiVersion` is set correctly.
+    - [x] Update `n8n.credentials` path to `dist/credentials/ActualBudgetApi.credentials.js`.
+    - [x] Update `n8n.nodes` path to `dist/nodes/ActualBudget/ActualBudget.node.js`.
+    - [x] Add `n8n-community-node-package` to `keywords`.
+    - [x] Update `repository.url` and `author` details.
 
 ## Phase II: Credential and API Client Implementation
 
-- [ ] **Task 2: Refine Credential Definition**
-    - [ ] Update `credentials/ActualBudgetApi.credentials.ts`.
-    - [ ] Add `serverURL` property.
-    - [ ] Add `password` property.
-    - [ ] Remove any hardcoded or user-facing `dataDir` property.
+- [x] **Task 2: Refine Credential Definition**
+    - [x] Update `credentials/ActualBudgetApi.credentials.ts`.
+    - [x] Add `serverURL` property.
+    - [x] Add `password` property.
+    - [x] Remove any hardcoded or user-facing `dataDir` property.
 
-- [ ] **Task 3: Implement API Client Initialization**
-    - [ ] In `nodes/ActualBudget/ActualBudget.node.ts`, create the `initApiClient` private helper function.
-    - [ ] Implement logic to fetch credentials.
-    - [ ] Implement logic to generate a persistent, credential-specific `dataDir` using a hash of the `serverURL`.
-    - [ ] Ensure the `dataDir` is created on the filesystem.
-    - [ ] Call `api.init()` with the correct parameters.
-    - [ ] Implement robust error handling for initialization failures.
+- [x] **Task 3: Implement API Client Initialization**
+    - [x] In `nodes/ActualBudget/ActualBudget.node.ts`, create the `initApiClient` private helper function.
+    - [x] Implement logic to fetch credentials.
+    - [x] Implement logic to generate a persistent, credential-specific `dataDir` using a hash of the `serverURL`.
+    - [x] Ensure the `dataDir` is created on the filesystem.
+    - [x] Call `api.init()` with the correct parameters.
+    - [x] Implement robust error handling for initialization failures.
 
 ## Phase III: Core Node Structure and UI
 
-- [ ] **Task 4: Refactor `ActualBudget.node.ts` to Programmatic Style**
-    - [ ] Define the main `Actual` class implementing `INodeType`.
-    - [ ] Configure the `description` property with `displayName`, `name`, `icon`, `group`, `version`, `subtitle`, etc.
-    - [ ] Add the `actualApi` credential to the `credentials` array.
+- [x] **Task 4: Refactor `ActualBudget.node.ts` to Programmatic Style**
+    - [x] Define the main `Actual` class implementing `INodeType`.
+    - [x] Configure the `description` property with `displayName`, `name`, `icon`, `group`, `version`, `subtitle`, etc.
+    - [x] Add the `actualApi` credential to the `credentials` array.
 
 - [ ] **Task 5: Define Resources and Operations**
     - [ ] Add the `resource` dropdown property.
