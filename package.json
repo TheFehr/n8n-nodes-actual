@@ -9,10 +9,10 @@
   ],
   "license": "MIT",
   "homepage": "https://github.com/slautebach/n8n-nodes-actual#readme",
-  "author": "slautebach",
+  "author": "n8n-community-nodes",
   "repository": {
     "type": "git",
-    "url": "https://github.com/slautebach/n8n-nodes-actual"
+    "url": "https://github.com/n8n-community-nodes/n8n-nodes-actual"
   },
   "scripts": {
     "build": "tsc && gulp build:icons",
