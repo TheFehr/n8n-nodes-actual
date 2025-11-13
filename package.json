@@ -1,19 +1,18 @@
 {
-  "name": "n8n-nodes-actual",
+  "name": "n8n-nodes-actualbudget",
   "version": "0.1.4",
   "description": "Interact with your Actual Budget instance",
   "keywords": [
-    "n8n-community-node-package"
+    "n8n-community-node-package",
+    "actualbudget",
+    "n8n-nodes-actualbudget"
   ],
   "license": "MIT",
-  "homepage": "",
-  "author": {
-    "name": "Philipp Fehr",
-    "email": "philipp@thefehr.me"
-  },
+  "homepage": "https://github.com/slautebach/n8n-nodes-actual#readme",
+  "author": "slautebach",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TheFehr/n8n-nodes-actual.git"
+    "url": "https://github.com/slautebach/n8n-nodes-actual"
   },
   "scripts": {
     "build": "tsc && gulp build:icons",

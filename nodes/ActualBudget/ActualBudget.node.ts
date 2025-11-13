@@ -864,6 +864,197 @@ export class ActualBudget implements INodeType {
 				default: 'getAll',
 			},
 			{
+				displayName: 'Account ID',
+				name: 'accountId',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getAccounts',
+				},
+				default: '',
+				description: 'The ID of the account to operate on.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll', 'add', 'import', 'update'],
+					},
+				},
+			},
+			{
+				displayName: 'Transaction ID',
+				name: 'transactionId',
+				type: 'string',
+				default: '',
+				description: 'The ID of the transaction to operate on.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['update', 'delete'],
+					},
+				},
+			},
+			{
+				displayName: 'Payee Name',
+				name: 'payeeName',
+				type: 'string',
+				default: '',
+				description: 'Filter transactions by payee name.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'Category Name',
+				name: 'categoryName',
+				type: 'string',
+				default: '',
+				description: 'Filter transactions by category name.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'Start Date',
+				name: 'startDate',
+				type: 'string',
+				default: '',
+				description: 'Filter transactions by start date (YYYY-MM-DD).',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'End Date',
+				name: 'endDate',
+				type: 'string',
+				default: '',
+				description: 'Filter transactions by end date (YYYY-MM-DD).',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'Minimum Amount',
+				name: 'minAmount',
+				type: 'number',
+				default: 0,
+				description: 'Filter transactions by minimum amount (in cents).',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'Maximum Amount',
+				name: 'maxAmount',
+				type: 'number',
+				default: 0,
+				description: 'Filter transactions by maximum amount (in cents).',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'Limit',
+				name: 'limit',
+				type: 'number',
+				default: 100,
+				description: 'Maximum number of transactions to return.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['getAll'],
+					},
+				},
+			},
+			{
+				displayName: 'Transactions',
+				name: 'transactions',
+				type: 'json',
+				default: '[]',
+				description: 'JSON array of transactions to add or import.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['add', 'import'],
+					},
+				},
+			},
+			{
+				displayName: 'Payee ID',
+				name: 'payeeId',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getPayees',
+				},
+				default: '',
+				description: 'The ID of the payee for the transaction.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['update'],
+					},
+				},
+			},
+			{
+				displayName: 'Category ID',
+				name: 'categoryId',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getCategories',
+				},
+				default: '',
+				description: 'The ID of the category for the transaction.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['update'],
+					},
+				},
+			},
+			{
+				displayName: 'Notes',
+				name: 'notes',
+				type: 'string',
+				default: '',
+				description: 'Notes for the transaction.',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['update'],
+					},
+				},
+			},
+			{
+				displayName: 'Amount',
+				name: 'amount',
+				type: 'number',
+				default: 0,
+				description: 'Amount of the transaction (in cents).',
+				displayOptions: {
+					show: {
+						resource: ['transaction'],
+						operation: ['update'],
+					},
+				},
+			},
+			{
 				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
@@ -897,110 +1088,79 @@ export class ActualBudget implements INodeType {
 				],
 				default: 'sync',
 			},
+			{
+				displayName: 'Account ID',
+				name: 'accountId',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getAccounts',
+				},
+				default: '',
+				description: 'The ID of the account to run bank sync for.',
+				displayOptions: {
+					show: {
+						resource: ['utility'],
+						operation: ['runBankSync'],
+					},
+				},
+			},
+			{
+				displayName: 'Query',
+				name: 'query',
+				type: 'string',
+				default: '',
+				description: 'The query to run.',
+				displayOptions: {
+					show: {
+						resource: ['utility'],
+						operation: ['runQuery'],
+					},
+				},
+			},
+			{
+				displayName: 'Type',
+				name: 'type',
+				type: 'options',
+				options: [
+					{
+						name: 'Account',
+						value: 'account',
+					},
+					{
+						name: 'Category',
+						value: 'category',
+					},
+					{
+						name: 'Category Group',
+						value: 'categoryGroup',
+					},
+					{
+						name: 'Payee',
+						value: 'payee',
+					},
+				],
+				default: 'account',
+				description: 'The type of entity to get ID for.',
+				displayOptions: {
+					show: {
+						resource: ['utility'],
+						operation: ['getIdByName'],
+					},
+				},
+			},
+			{
+				displayName: 'Name',
+				name: 'name',
+				type: 'string',
+				default: '',
+				description: 'The name of the entity to get ID for.',
+				displayOptions: {
+					show: {
+						resource: ['utility'],
+						operation: ['getIdByName'],
+					},
+				},
+			},
 		],
 	};
-
-	methods = {
-		listSearch: {
-			searchBudget: async function (
-				this: ILoadOptionsFunctions,
-				filter?: string,
-				paginationToken?: string,
-			): Promise<INodeListSearchResult> {
-				const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
-				const actual = await (this as any).initApiClient(auth);
-
-				let budgets = actual.getBudgets();
-				console.debug(filter, budgets);
-
-				if (filter !== undefined && filter !== '') {
-					budgets = budgets.filter((budget: any) =>
-						budget.name.toLowerCase().includes(filter.toLowerCase()),
-					);
-				}
-
-				await actual.shutdown();
-
-				return {
-					results: budgets.map((budget: any) => ({
-						name: budget.name,
-						value: budget.cloudFileId,
-						url: '',
-					})),
-				};
-			},
-		},
-	};
-
-	private async initApiClient(auth: Credentials): Promise<any> {
-		const actual = require('@actual-app/api');
-
-		const serverUrlHash = crypto.createHash('md5').update(auth.url).digest('hex');
-		const dataDir = `/tmp/actual-data-${serverUrlHash}`;
-
-		if (!fs.existsSync(dataDir)) {
-			fs.mkdirSync(dataDir, { recursive: true });
-		}
-
-		try {
-			await actual.init({
-				serverURL: auth.url,
-				password: auth.password,
-				dataDir: dataDir,
-			});
-			return actual;
-		} catch (error) {
-			throw new Error(`Actual Budget API initialization failed: ${error.message}`);
-		}
-	}
-
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const returnData = [];
-
-		const action = this.getNodeParameter('operation', 0) as string;
-		const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
-		const actual = await (this as any).initApiClient(auth);
-
-		const budgetId = this.getNodeParameter('budgetId', 0) as string;
-
-		await actual.downloadBudget(budgetId);
-
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-			try {
-				let elementData;
-				switch (action) {
-					case 'importTransactions':
-						elementData = await handleBudgetImport(this, actual, itemIndex);
-						returnData.push(elementData);
-						break;
-				}
-			} catch (error) {
-				if (this.continueOnFail()) {
-					const executionData = this.helpers.constructExecutionMetaData(
-						this.helpers.returnJsonArray({ error: error.message }),
-						{ itemData: { item: itemIndex } },
-					);
-					returnData.push(...executionData);
-					continue;
-				}
-				await actual.shutdown();
-				throw error;
-			}
-		}
-
-		await actual.shutdown();
-		return [this.helpers.returnJsonArray(returnData)];
-	}
-}
-
-async function handleBudgetImport(
-	context: IExecuteFunctions,
-	actual: any,
-	itemIndex: number,
-): Promise<IDataObject> {
-	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const transactions = context.getNodeParameter('transactions', itemIndex);
-
-	return actual.importTransactions(accountId, transactions) as IDataObject;
 }
