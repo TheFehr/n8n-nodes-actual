@@ -10,8 +10,8 @@ export class ActualBudgetApi implements ICredentialType {
 	documentationUrl = 'https://actualbudget.org/docs/api/';
 	properties: INodeProperties[] = [
 		{
-			displayName: 'URL',
-			name: 'url',
+			displayName: 'Server URL',
+			name: 'serverURL',
 			type: 'string',
 			default: '',
 			required: true
@@ -30,7 +30,7 @@ export class ActualBudgetApi implements ICredentialType {
 
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: '={{$credentials?.url}}',
+			baseURL: '={{$credentials?.serverURL}}',
 			url: '=/account/login',
 			method: 'POST',
 			body: {
