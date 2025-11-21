@@ -55,8 +55,6 @@ jobs:
       - name: Publish to NPM
         if: steps.check_version.outputs.updated == 'true'
         run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit and Push Version Bump
         if: steps.check_version.outputs.updated == 'true'
