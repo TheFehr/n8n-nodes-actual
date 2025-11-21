@@ -2,11 +2,11 @@
   "name": "n8n-nodes-actual",
   "version": "25.11.0",
   "description": "Interact with your Actual Budget instance",
+  "license": "MIT",
+  "homepage": "",
   "keywords": [
     "n8n-community-node-package"
   ],
-  "license": "MIT",
-  "homepage": "",
   "author": {
     "name": "Philipp Fehr",
     "email": "philipp@thefehr.me"
@@ -16,18 +16,20 @@
     "url": "git+https://github.com/TheFehr/n8n-nodes-actual.git"
   },
   "scripts": {
-    "build": "tsc && gulp build:icons",
-    "dev": "tsc --watch",
-    "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes credentials package.json",
-    "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes credentials package.json"
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
   },
   "files": [
     "dist"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
+		"strict": true,
     "credentials": [
       "dist/credentials/ActualBudgetApi.credentials.js"
     ],
@@ -36,13 +38,11 @@
     ]
   },
   "devDependencies": {
-    "@types/request-promise-native": "~1.0.15",
-    "@typescript-eslint/parser": "^7.15.0",
-    "eslint": "^9.39.1",
-    "eslint-plugin-n8n-nodes-base": "^1.16.3",
-    "gulp": "^5.0.0",
-    "prettier": "^3.3.2",
-    "typescript": "^5.5.3"
+		"@n8n/node-cli": "*",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^19.0.4",
+		"typescript": "5.9.2"
   },
   "peerDependencies": {
     "n8n-workflow": "*"
