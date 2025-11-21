@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-actual",
-  "version": "0.1.4",
+  "version": "25.11.0",
   "description": "Interact with your Actual Budget instance",
   "keywords": [
     "n8n-community-node-package"
@@ -48,6 +48,6 @@
     "n8n-workflow": "*"
   },
   "dependencies": {
-    "@actual-app/api": "^25.10.0"
+    "@actual-app/api": "25.11.0"
   }
 }
