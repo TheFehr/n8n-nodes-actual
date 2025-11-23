@@ -1,13 +1,15 @@
 import {
 	IDataObject,
 	IExecuteFunctions,
-	ILoadOptionsFunctions,
 	INodeExecutionData,
-	INodeListSearchResult,
 	INodeType,
 	INodeTypeDescription,
 	NodeConnectionTypes,
 } from 'n8n-workflow';
+
+import * as actual from '@actual-app/api';
+import { ImportTransactionEntity } from '@actual-app/api/@types/loot-core/src/types/models';
+type ActualAPI = typeof actual;
 
 interface Credentials {
 	url: string;
@@ -80,38 +82,7 @@ export class ActualBudget implements INodeType {
 				required: true,
 			},
 		],
-	};
-
-	methods = {
-		listSearch: {
-			searchBudget: async function (
-				this: ILoadOptionsFunctions,
-				filter?: string,
-				paginationToken?: string,
-			): Promise<INodeListSearchResult> {
-				const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
-				const actual = await initializeActualBudget(auth);
-
-				let budgets = actual.getBudgets();
-				console.debug(filter, budgets);
-
-				if (filter !== undefined && filter !== '') {
-					budgets = budgets.filter((budget: any) =>
-						budget.name.toLowerCase().includes(filter.toLowerCase()),
-					);
-				}
-
-				await actual.shutdown();
-
-				return {
-					results: budgets.map((budget: any) => ({
-						name: budget.name,
-						value: budget.cloudFileId,
-						url: '',
-					})),
-				};
-			},
-		},
+		usableAsTool: undefined,
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -154,9 +125,7 @@ export class ActualBudget implements INodeType {
 	}
 }
 
-async function initializeActualBudget(auth: Credentials): Promise<any> {
-	const actual = require('@actual-app/api');
-
+async function initializeActualBudget(auth: Credentials): Promise<ActualAPI> {
 	await actual.init({
 		serverURL: auth.url,
 		password: auth.password,
@@ -167,11 +136,11 @@ async function initializeActualBudget(auth: Credentials): Promise<any> {
 
 async function handleBudgetImport(
 	context: IExecuteFunctions,
-	actual: any,
+	actual: ActualAPI,
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const transactions = context.getNodeParameter('transactions', itemIndex);
+	const transactions = context.getNodeParameter('transactions', itemIndex) as unknown as ImportTransactionEntity[];
 
-	return actual.importTransactions(accountId, transactions) as IDataObject;
+	return await actual.importTransactions(accountId, transactions) as unknown as IDataObject;
 }

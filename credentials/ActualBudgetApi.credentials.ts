@@ -1,8 +1,4 @@
-import {
-	ICredentialTestRequest,
-	ICredentialType,
-	INodeProperties,
-} from 'n8n-workflow';
+import { IconFile, ICredentialTestRequest, ICredentialType, INodeProperties } from 'n8n-workflow';
 
 export class ActualBudgetApi implements ICredentialType {
 	name = 'actualBudgetApi';
@@ -39,4 +35,6 @@ export class ActualBudgetApi implements ICredentialType {
 			}
 		}
 	};
+
+	icon = "file:../nodes/ActualBudget/actualbudget.svg" as IconFile;
 }
