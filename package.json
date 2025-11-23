@@ -1,11 +1,16 @@
 {
   "name": "n8n-nodes-actual",
-  "version": "25.10.0",
+  "version": "25.11.0",
   "description": "Interact with your Actual Budget instance",
   "license": "MIT",
   "homepage": "",
-  "keywords": ["n8n-community-node-package"],
-  "author": { "name": "Philipp Fehr", "email": "philipp@thefehr.me" },
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "author": {
+    "name": "Philipp Fehr",
+    "email": "philipp@thefehr.me"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TheFehr/n8n-nodes-actual.git"
@@ -19,12 +24,18 @@
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": false,
-    "credentials": ["dist/credentials/ActualBudgetApi.credentials.js"],
-    "nodes": ["dist/nodes/ActualBudget/ActualBudget.node.js"]
+    "credentials": [
+      "dist/credentials/ActualBudgetApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/ActualBudget/ActualBudget.node.js"
+    ]
   },
   "devDependencies": {
     "@n8n/node-cli": "*",
@@ -33,6 +44,10 @@
     "release-it": "^19.0.4",
     "typescript": "5.9.2"
   },
-  "peerDependencies": { "n8n-workflow": "*" },
-  "dependencies": { "@actual-app/api": "25.11.0" }
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "dependencies": {
+    "@actual-app/api": "25.11.0"
+  }
 }

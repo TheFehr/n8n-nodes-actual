@@ -54,10 +54,6 @@ jobs:
             echo "updated=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Publish to NPM
-        if: steps.check_version.outputs.updated == 'true'
-        run: npm publish
-
       - name: Commit and Push Version Bump
         if: steps.check_version.outputs.updated == 'true'
         run: |
@@ -66,3 +62,7 @@ jobs:
           git add package.json package-lock.json
           git commit -m "chore: sync version with @actual-app/api v${{ steps.check_version.outputs.version }} [skip ci]"
           git push
+
+      - name: Publish to NPM
+        if: steps.check_version.outputs.updated == 'true'
+        run: npm publish
