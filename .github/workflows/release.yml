@@ -24,6 +24,7 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          always-auth: true
 
       # Ensure npm 11.5.1 or later is installed
       - name: Update npm
@@ -60,6 +61,9 @@ jobs:
 
       - name: Publish to NPM
         if: steps.check_version.outputs.updated == 'true'
+        env:
+          NPM_CONFIG_PROVENANCE: true
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         run: npm run release
 
       - name: Commit and Push Version Bump
