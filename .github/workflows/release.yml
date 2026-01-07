@@ -59,6 +59,14 @@ jobs:
             echo "updated=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Commit Version Bump
+        if: steps.check_version.outputs.updated == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git commit -m "chore: sync version with @actual-app/api v${{ steps.check_version.outputs.version }} [skip ci]"
+
       - name: Publish to NPM
         if: steps.check_version.outputs.updated == 'true'
         env:
@@ -66,11 +74,7 @@ jobs:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         run: npm run release
 
-      - name: Commit and Push Version Bump
+      - name: Push Version Bump
         if: steps.check_version.outputs.updated == 'true'
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add package.json package-lock.json
-          git commit -m "chore: sync version with @actual-app/api v${{ steps.check_version.outputs.version }} [skip ci]"
           git push
