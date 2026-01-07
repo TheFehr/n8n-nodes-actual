@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # Runs at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows manual triggering
 
 permissions:
   id-token: write  # Required for OIDC
@@ -54,6 +58,10 @@ jobs:
             echo "updated=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Publish to NPM
+        if: steps.check_version.outputs.updated == 'true'
+        run: npm run release
+
       - name: Commit and Push Version Bump
         if: steps.check_version.outputs.updated == 'true'
         run: |
@@ -62,7 +70,3 @@ jobs:
           git add package.json package-lock.json
           git commit -m "chore: sync version with @actual-app/api v${{ steps.check_version.outputs.version }} [skip ci]"
           git push
-
-      - name: Publish to NPM
-        if: steps.check_version.outputs.updated == 'true'
-        run: npm publish
