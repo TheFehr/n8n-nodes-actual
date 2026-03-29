@@ -48,12 +48,29 @@ jobs:
           echo "API Version: $API_VERSION"
           echo "Current Version: $CURRENT_VERSION"
 
-          if [ "$API_VERSION" != "$CURRENT_VERSION" ]; then
-            echo "Versions differ. Updating package.json..."
-            # Update version without creating a git tag immediately
-            npm version $API_VERSION --no-git-tag-version --allow-same-version
+          # Extract base version (without prerelease suffix) from current version
+          CURRENT_BASE=$(echo "$CURRENT_VERSION" | sed 's/-[0-9]*$//')
+
+          if [ "$API_VERSION" != "$CURRENT_BASE" ]; then
+            echo "Base versions differ. Updating package.json with prerelease suffix..."
+            # Update version with -1 prerelease suffix
+            NEW_VERSION="${API_VERSION}-1"
+            npm version $NEW_VERSION --no-git-tag-version --allow-same-version
             echo "updated=true" >> $GITHUB_OUTPUT
-            echo "version=$API_VERSION" >> $GITHUB_OUTPUT
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          elif [ "$API_VERSION" = "$CURRENT_BASE" ]; then
+            # Same API version but might need to increment prerelease counter
+            PRERELEASE=$(echo "$CURRENT_VERSION" | grep -oE '\-[0-9]+$' || echo "")
+            if [ -z "$PRERELEASE" ]; then
+              # Current version has no prerelease suffix, add -1
+              NEW_VERSION="${API_VERSION}-1"
+              npm version $NEW_VERSION --no-git-tag-version --allow-same-version
+              echo "updated=true" >> $GITHUB_OUTPUT
+              echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            else
+              echo "Versions match with prerelease. No update needed."
+              echo "updated=false" >> $GITHUB_OUTPUT
+            fi
           else
             echo "Versions match. No update needed."
             echo "updated=false" >> $GITHUB_OUTPUT
