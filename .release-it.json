@@ -1,6 +1,11 @@
 {
-	"npm": {
-		"skipChecks": true,
-   "allowSameVersion": true
+	"npm":{
+		"skipChecks":true,
+		"allowSameVersion":true,
+		"tag":"latest"
+	},
+	"git":{
+		"requireBranch":"main",
+		"tagName":"${version}"
 	}
 }
