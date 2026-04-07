@@ -98,4 +98,4 @@ jobs:
           # Configure git for release-it to commit and tag
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          npm run release -- ${{ steps.check_version.outputs.RELEASE_BUMP }} --ci
+          npm run release -- "${{ steps.check_version.outputs.RELEASE_BUMP }}" --ci
