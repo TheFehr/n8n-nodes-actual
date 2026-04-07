@@ -7,7 +7,7 @@
 	"git": {
 		"requireBranch": "main",
 		"tagName": "${version}",
-		"commitMessage": "Release ${version}"
+		"commitMessage": "Release ${version} [skip ci]"
 	},
 	"changelog": {
 		"file": "CHANGELOG.md",
