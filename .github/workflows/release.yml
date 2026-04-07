@@ -88,6 +88,9 @@ jobs:
               echo "SKIP_RELEASE=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Build
+        run: npm run build
+
       - name: Publish to NPM
         if: steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
@@ -98,4 +101,4 @@ jobs:
           # Configure git for release-it to commit and tag
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          npm run release -- "${{ steps.check_version.outputs.RELEASE_BUMP }}" --ci
+          npx release-it ${{ steps.check_version.outputs.RELEASE_BUMP }} --ci
