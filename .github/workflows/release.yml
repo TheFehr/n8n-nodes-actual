@@ -19,6 +19,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for git describe and commit counting
 
       - uses: actions/setup-node@v4
         with:
@@ -26,7 +28,6 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           always-auth: true
 
-      # Ensure npm 11.5.1 or later is installed
       - name: Update npm
         run: npm install -g npm@latest
 
@@ -36,62 +37,65 @@ jobs:
       - name: Run lint
         run: npm run lint
 
-      - name: Check and Update Version
+      - name: Calculate Version and Check for Changes
         id: check_version
         run: |
-          # Get the installed version of @actual-app/api
-          API_VERSION=$(npm list @actual-app/api --depth=0 --json | jq -r '.dependencies["@actual-app/api"].version')
-
-          # Get the current package version
-          CURRENT_VERSION=$(jq -r .version package.json)
+          # Read versions from package.json
+          # Strip any prefixes like ^ or ~ from the version string
+          API_VERSION=$(jq -r '.dependencies["@actual-app/api"]' package.json | sed 's/^[^0-9]*//')
+          CURRENT_VERSION=$(jq -r .version package.json | sed 's/^[^0-9]*//')
 
           echo "API Version: $API_VERSION"
           echo "Current Version: $CURRENT_VERSION"
 
-          # Extract base version (without prerelease suffix) from current version
-          CURRENT_BASE=$(echo "$CURRENT_VERSION" | sed 's/-[0-9]*$//')
+          # Extract MAJOR and MINOR components
+          API_MAJOR=$(echo "$API_VERSION" | cut -d. -f1)
+          API_MINOR=$(echo "$API_VERSION" | cut -d. -f2)
+          CURRENT_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+          CURRENT_MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
 
-          if [ "$API_VERSION" != "$CURRENT_BASE" ]; then
-            echo "Base versions differ. Updating package.json with prerelease suffix..."
-            # Update version with -1 prerelease suffix
-            NEW_VERSION="${API_VERSION}-1"
-            npm version $NEW_VERSION --no-git-tag-version --allow-same-version
-            echo "updated=true" >> $GITHUB_OUTPUT
-            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          elif [ "$API_VERSION" = "$CURRENT_BASE" ]; then
-            # Same API version but might need to increment prerelease counter
-            PRERELEASE=$(echo "$CURRENT_VERSION" | grep -oE '\-[0-9]+$' || echo "")
-            if [ -z "$PRERELEASE" ]; then
-              # Current version has no prerelease suffix, add -1
-              NEW_VERSION="${API_VERSION}-1"
-              npm version $NEW_VERSION --no-git-tag-version --allow-same-version
-              echo "updated=true" >> $GITHUB_OUTPUT
-              echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            else
-              echo "Versions match with prerelease. No update needed."
-              echo "updated=false" >> $GITHUB_OUTPUT
-            fi
+          API_MM="${API_MAJOR}.${API_MINOR}"
+          CURRENT_MM="${CURRENT_MAJOR}.${CURRENT_MINOR}"
+
+          echo "API MAJOR.MINOR: $API_MM"
+          echo "Current MAJOR.MINOR: $CURRENT_MM"
+
+          # Determine the release bump strategy
+          if [ "$API_MAJOR" -gt "$CURRENT_MAJOR" ] || { [ "$API_MAJOR" -eq "$CURRENT_MAJOR" ] && [ "$API_MINOR" -gt "$CURRENT_MINOR" ]; }; then
+              echo "API has newer MAJOR.MINOR. Forcing sync to ${API_MM}.0"
+              RELEASE_BUMP="${API_MM}.0"
           else
-            echo "Versions match. No update needed."
-            echo "updated=false" >> $GITHUB_OUTPUT
+              echo "MAJOR.MINOR versions are identical or API is older. Using patch."
+              RELEASE_BUMP="patch"
           fi
 
-      - name: Commit Version Bump
-        if: steps.check_version.outputs.updated == 'true'
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add package.json package-lock.json
-          git commit -m "chore: sync version with @actual-app/api v${{ steps.check_version.outputs.version }} [skip ci]"
+          echo "RELEASE_BUMP=$RELEASE_BUMP" >> $GITHUB_OUTPUT
+
+          # Check for changes since the last git tag to prevent empty patch releases
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+              COMMITS_SINCE_TAG=$(git rev-list $LAST_TAG..HEAD --count)
+          else
+              COMMITS_SINCE_TAG=1 # If no tags exist, assume there are changes
+          fi
+
+          echo "Commits since last tag ($LAST_TAG): $COMMITS_SINCE_TAG"
+
+          if [ "$RELEASE_BUMP" = "patch" ] && [ "$COMMITS_SINCE_TAG" -eq 0 ]; then
+              echo "No new commits and bump is patch. Skipping release."
+              echo "SKIP_RELEASE=true" >> $GITHUB_OUTPUT
+          else
+              echo "SKIP_RELEASE=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Publish to NPM
-        if: steps.check_version.outputs.updated == 'true'
+        if: steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
-        run: npm run release
-
-      - name: Push Version Bump
-        if: steps.check_version.outputs.updated == 'true'
         run: |
-          git push
+          # Configure git for release-it to commit and tag
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          npm run release -- ${{ steps.check_version.outputs.RELEASE_BUMP }} --ci
