@@ -1,11 +1,20 @@
 {
-	"npm":{
-		"skipChecks":true,
-		"allowSameVersion":true,
-		"tag":"latest"
+	"npm": {
+		"skipChecks": true,
+		"allowSameVersion": true,
+		"tag": "latest"
 	},
-	"git":{
-		"requireBranch":"main",
-		"tagName":"${version}"
+	"git": {
+		"requireBranch": "main",
+		"tagName": "${version}",
+		"commitMessage": "Release ${version} [skip ci]"
+	},
+	"changelog": {
+		"file": "CHANGELOG.md",
+		"format": "markdown"
+	},
+	"github": {
+		"release": true,
+		"releaseName": "Release ${version}"
 	}
 }
