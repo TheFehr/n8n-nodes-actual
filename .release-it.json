@@ -1,1 +1,20 @@
-{"npm":{"skipChecks":true,"allowSameVersion":true,"tag":"latest"},"git":{"requireBranch":"main","tagName":"${version}","commitMessage":"Release ${version}"},"changelog":{"file":"CHANGELOG.md","format":"markdown"},"github":{"release":true,"releaseName":"Release ${version}"}}
+{
+	"npm": {
+		"skipChecks": true,
+		"allowSameVersion": true,
+		"tag": "latest"
+	},
+	"git": {
+		"requireBranch": "main",
+		"tagName": "${version}",
+		"commitMessage": "Release ${version}"
+	},
+	"changelog": {
+		"file": "CHANGELOG.md",
+		"format": "markdown"
+	},
+	"github": {
+		"release": true,
+		"releaseName": "Release ${version}"
+	}
+}
