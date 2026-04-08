@@ -10,6 +10,7 @@ import {
 // Using require instead of import for @actual-app/api to bypass TypeScript's attempt to 
 // compile source files in @actual-app/core (a dependency of @actual-app/api).
 // This prevents build errors caused by broken type exports in the core package.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const {init, downloadBudget, importTransactions, shutdown} = require('@actual-app/api');
 
 interface Credentials {
@@ -138,7 +139,7 @@ async function handleBudgetImport(
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const transactions = context.getNodeParameter('transactions', itemIndex) as any[];
+	const transactions = context.getNodeParameter('transactions', itemIndex) as ActualTransaction[];
 
 	return (await importTransactions(accountId, transactions)) as unknown as IDataObject;
 }

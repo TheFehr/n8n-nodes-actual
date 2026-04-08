@@ -7,10 +7,32 @@
 // import system causes the n8n-node compiler to try (and fail) to compile                                                                                                                           │
 // those third-party source files.                                                                                                                                                                   │
 //                                                                                                                                                                                                   │
-// By declaring them globally here, we provide type safety for the `require()`                                                                                                                       │
-// used in the node implementation while completely isolating the compiler                                                                                                                           │
+// By declaring them globally here, we provide type safety for the `require()`
+// used in the node implementation while completely isolating the compiler
 // from the broken @actual-app/core type-chain.
-declare function init(config: { serverURL: string; password?: string; budgetId?: string; dataDir?: string }): Promise<void>;
+
+interface ActualTransaction {
+	date: string;
+	amount: number;
+	payee?: string;
+	payee_name?: string;
+	imported_payee?: string;
+	category?: string;
+	notes?: string;
+	cleared?: boolean;
+	imported_id?: string;
+}
+
+declare function init(config: {
+	serverURL: string;
+	password?: string;
+	budgetId?: string;
+	dataDir?: string;
+}): Promise<void>;
 declare function downloadBudget(budgetId: string, options?: { password?: string }): Promise<void>;
-declare function importTransactions(accountId: string, transactions: any[]): Promise<string>;
+declare function importTransactions(
+	accountId: string,
+	transactions: ActualTransaction[],
+): Promise<string>;
 declare function shutdown(): Promise<void>;
+
