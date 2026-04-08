@@ -7,9 +7,11 @@ import {
 	NodeConnectionTypes,
 } from 'n8n-workflow';
 
-import * as actual from '@actual-app/api';
-import { ImportTransactionEntity } from '@actual-app/api/@types/loot-core/src/types/models';
-type ActualAPI = typeof actual;
+// Using require instead of import for @actual-app/api to bypass TypeScript's attempt to 
+// compile source files in @actual-app/core (a dependency of @actual-app/api).
+// This prevents build errors caused by broken type exports in the core package.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const {init, downloadBudget, importTransactions, shutdown} = require('@actual-app/api');
 
 interface Credentials {
 	url: string;
@@ -91,18 +93,18 @@ export class ActualBudget implements INodeType {
 
 		const action = this.getNodeParameter('operation', 0) as string;
 		const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
-		const actual = await initializeActualBudget(auth);
+		await initializeActualBudget(auth);
 
 		const budgetId = this.getNodeParameter('budgetId', 0) as string;
 
-		await actual.downloadBudget(budgetId);
+		await downloadBudget(budgetId);
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
 				let elementData;
 				switch (action) {
 					case 'importTransactions':
-						elementData = await handleBudgetImport(this, actual, itemIndex);
+						elementData = await handleBudgetImport(this, itemIndex);
 						returnData.push(elementData);
 						break;
 				}
@@ -115,32 +117,29 @@ export class ActualBudget implements INodeType {
 					returnData.push(...executionData);
 					continue;
 				}
-				await actual.shutdown();
+				await shutdown();
 				throw error;
 			}
 		}
 
-		await actual.shutdown();
+		await shutdown();
 		return [this.helpers.returnJsonArray(returnData)];
 	}
 }
 
-async function initializeActualBudget(auth: Credentials): Promise<ActualAPI> {
-	await actual.init({
+async function initializeActualBudget(auth: Credentials): Promise<void> {
+	await init({
 		serverURL: auth.url,
 		password: auth.password,
 	});
-
-	return actual;
 }
 
 async function handleBudgetImport(
 	context: IExecuteFunctions,
-	actual: ActualAPI,
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const transactions = context.getNodeParameter('transactions', itemIndex) as unknown as ImportTransactionEntity[];
+	const transactions = context.getNodeParameter('transactions', itemIndex) as ActualTransaction[];
 
-	return await actual.importTransactions(accountId, transactions) as unknown as IDataObject;
+	return (await importTransactions(accountId, transactions)) as unknown as IDataObject;
 }
