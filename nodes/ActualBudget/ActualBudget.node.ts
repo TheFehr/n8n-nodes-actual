@@ -8,7 +8,8 @@ import {
 } from 'n8n-workflow';
 
 import * as actual from '@actual-app/api';
-import { ImportTransactionEntity } from '@actual-app/api/@types/loot-core/src/types/models';
+import type { ImportTransactionEntity } from '@actual-app/core/types/models';
+
 type ActualAPI = typeof actual;
 
 interface Credentials {
