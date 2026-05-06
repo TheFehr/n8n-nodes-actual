@@ -49,6 +49,6 @@
     "n8n-workflow": "*"
   },
   "dependencies": {
-    "@actual-app/api": "26.4.0"
+    "@actual-app/api": "26.5.0"
   }
 }

@@ -7,11 +7,24 @@ import {
 	NodeConnectionTypes,
 } from 'n8n-workflow';
 
-// Using require instead of import for @actual-app/api to bypass TypeScript's attempt to 
-// compile source files in @actual-app/core (a dependency of @actual-app/api).
-// This prevents build errors caused by broken type exports in the core package.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const {init, downloadBudget, importTransactions, shutdown} = require('@actual-app/api');
+import {
+	init,
+	downloadBudget,
+	importTransactions,
+	shutdown,
+} from '@actual-app/api';
+
+interface ActualTransaction {
+	date: string;
+	amount: number;
+	payee?: string;
+	payee_name?: string;
+	imported_payee?: string;
+	category?: string;
+	notes?: string;
+	cleared?: boolean;
+	imported_id?: string;
+}
 
 interface Credentials {
 	url: string;
