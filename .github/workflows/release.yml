@@ -95,10 +95,27 @@ jobs:
         if: steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         run: |
-          # Configure git for release-it to commit and tag
+          # Configure git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          npx release-it ${{ steps.check_version.outputs.RELEASE_BUMP }} --ci
+
+          # Bump version in package.json
+          npm version ${{ steps.check_version.outputs.RELEASE_BUMP }} --no-git-tag-version --allow-same-version
+
+          # Update changelog
+          npx auto-changelog -p
+
+          # Commit and Tag
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "Release ${{ steps.check_version.outputs.RELEASE_BUMP }} [skip ci]"
+          git tag ${{ steps.check_version.outputs.RELEASE_BUMP }}
+
+          # Push commit and tag
+          git push origin main --tags
+
+          # Publish to NPM directly with provenance enabled
+          # We do this instead of 'npm run release' to keep full control over the versioning
+          npm publish --provenance --access public
