@@ -102,16 +102,20 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-          # Bump version in package.json
-          npm version ${{ steps.check_version.outputs.RELEASE_BUMP }} --no-git-tag-version --allow-same-version
+          # Bump version in package.json and capture the new version
+          # npm version outputs the version string (e.g., v26.5.1)
+          NEW_VERSION=$(npm version ${{ steps.check_version.outputs.RELEASE_BUMP }} --no-git-tag-version --allow-same-version)
+          # Strip the leading 'v'
+          NEW_VERSION=${NEW_VERSION#v}
+          echo "Final Version: $NEW_VERSION"
 
           # Update changelog
           npx auto-changelog -p
 
           # Commit and Tag
           git add package.json package-lock.json CHANGELOG.md
-          git commit -m "Release ${{ steps.check_version.outputs.RELEASE_BUMP }} [skip ci]"
-          git tag ${{ steps.check_version.outputs.RELEASE_BUMP }}
+          git commit -m "Release $NEW_VERSION [skip ci]"
+          git tag $NEW_VERSION
 
           # Push commit and tag
           git push origin main --tags
