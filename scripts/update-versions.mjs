@@ -13,11 +13,11 @@ async function getLatestNpmVersion(pkg) {
   return data.version;
 }
 
-async function updatePackageJson(n8nVersion, actualVersion, dryRun) {
+async function updatePackageJson(n8nWorkflowVersion, actualVersion, dryRun) {
   const path = join(process.cwd(), "package.json");
   const pkg = JSON.parse(readFileSync(path, "utf8"));
 
-  const newN8nPeer = n8nVersion;
+  const newN8nPeer = n8nWorkflowVersion;
   const newActual = actualVersion;
   const oldN8nPeer = pkg.peerDependencies?.["n8n-workflow"];
   const oldActual = pkg.dependencies?.["@actual-app/api"];
@@ -68,12 +68,14 @@ async function main() {
     const dryRun = process.argv.includes("--check");
 
     const n8nVersion = await getLatestNpmVersion("n8n");
+    const n8nWorkflowVersion = await getLatestNpmVersion("n8n-workflow");
     const actualVersion = await getLatestNpmVersion("@actual-app/api");
 
     console.log(`Latest n8n:            ${n8nVersion}`);
+    console.log(`Latest n8n-workflow:   ${n8nWorkflowVersion}`);
     console.log(`Latest @actual-app/api: ${actualVersion}`);
 
-    const pkgUpdated = await updatePackageJson(n8nVersion, actualVersion, dryRun);
+    const pkgUpdated = await updatePackageJson(n8nWorkflowVersion, actualVersion, dryRun);
     const readmeUpdated = await updateReadme(n8nVersion, actualVersion, dryRun);
 
     const anyUpdated = pkgUpdated || readmeUpdated;

@@ -5,6 +5,7 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	NodeConnectionTypes,
+	NodeOperationError,
 } from 'n8n-workflow';
 
 import {
@@ -153,7 +154,16 @@ async function handleBudgetImport(
 ): Promise<IDataObject> {
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
 	const raw = context.getNodeParameter('transactions', itemIndex);
-	const transactions: ActualTransaction[] = typeof raw === 'string' ? JSON.parse(raw) : (raw as ActualTransaction[]);
+	const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+	if (!Array.isArray(parsed)) {
+		throw new NodeOperationError(context.getNode(), `"transactions" must be a JSON array, got ${typeof parsed}`);
+	}
+	for (const item of parsed) {
+		if (typeof item !== 'object' || item === null || !('date' in item) || !('amount' in item)) {
+			throw new NodeOperationError(context.getNode(), 'Each transaction must have "date" and "amount" fields');
+		}
+	}
+	const transactions = parsed as ActualTransaction[];
 
 	return (await importTransactions(accountId, transactions)) as unknown as IDataObject;
 }
