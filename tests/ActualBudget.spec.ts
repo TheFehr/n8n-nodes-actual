@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ActualBudget } from "../nodes/ActualBudget/ActualBudget.node";
-import type { IExecuteFunctions } from "n8n-workflow";
+import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 
 vi.mock("@actual-app/api", () => ({
   init: vi.fn().mockResolvedValue(undefined),
@@ -15,7 +15,7 @@ import * as actualApi from "@actual-app/api";
 
 describe("ActualBudget", () => {
   let node: ActualBudget;
-  let executeFunctions: any;
+  let executeFunctions: IExecuteFunctions;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -28,12 +28,14 @@ describe("ActualBudget", () => {
         .mockResolvedValue({ url: "http://localhost:5006", password: "test-password" }),
       continueOnFail: vi.fn().mockReturnValue(false),
       helpers: {
-        returnJsonArray: vi.fn((data: any) =>
-          Array.isArray(data) ? data.map((d: any) => ({ json: d })) : [{ json: data }],
+        returnJsonArray: vi.fn((data: unknown) =>
+          Array.isArray(data)
+            ? data.map((d) => ({ json: d as IDataObject }))
+            : [{ json: data as IDataObject }],
         ),
-        constructExecutionMetaData: vi.fn((data: any, _meta: any) => data),
+        constructExecutionMetaData: vi.fn((data: unknown) => data),
       },
-    };
+    } as unknown as IExecuteFunctions;
   });
 
   it("should call init with credentials", async () => {
@@ -45,7 +47,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    await node.execute.call(executeFunctions);
 
     expect(actualApi.init).toHaveBeenCalledWith({
       serverURL: "http://localhost:5006",
@@ -62,7 +64,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    await node.execute.call(executeFunctions);
 
     expect(actualApi.downloadBudget).toHaveBeenCalledWith("my-budget-group-id");
   });
@@ -80,7 +82,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    await node.execute.call(executeFunctions);
 
     expect(actualApi.importTransactions).toHaveBeenCalledWith("account-abc", transactions);
   });
@@ -94,7 +96,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    await node.execute.call(executeFunctions);
 
     expect(actualApi.shutdown).toHaveBeenCalled();
   });
@@ -111,9 +113,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    await expect(
-      node.execute.call(executeFunctions as unknown as IExecuteFunctions),
-    ).rejects.toThrow("Import failed");
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow("Import failed");
 
     expect(actualApi.shutdown).toHaveBeenCalled();
   });
@@ -130,7 +130,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    const result = await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    const result = await node.execute.call(executeFunctions);
 
     expect(result).toBeDefined();
     expect(actualApi.shutdown).toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe("ActualBudget", () => {
 
   it("should call importTransactions once per input item", async () => {
     executeFunctions.getInputData.mockReturnValue([{ json: {} }, { json: {} }, { json: {} }]);
-    executeFunctions.getNodeParameter.mockImplementation((name: string, _index: number) => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
@@ -146,7 +146,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    await node.execute.call(executeFunctions);
 
     expect(actualApi.importTransactions).toHaveBeenCalledTimes(3);
     // init and downloadBudget are called once, not per item
@@ -156,7 +156,7 @@ describe("ActualBudget", () => {
 
   it("should return importTransactions result in output", async () => {
     const importResult = { added: ["tx-1", "tx-2"], updated: [], updatedPreview: [], errors: [] };
-    vi.mocked(actualApi.importTransactions).mockResolvedValueOnce(importResult as any);
+    vi.mocked(actualApi.importTransactions).mockResolvedValueOnce(importResult as unknown);
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
       if (name === "budgetId") return "test-budget-id";
@@ -165,7 +165,7 @@ describe("ActualBudget", () => {
       return undefined;
     });
 
-    const result = await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    const result = await node.execute.call(executeFunctions);
 
     expect(result[0][0].json).toEqual(importResult);
   });

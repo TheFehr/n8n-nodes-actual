@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { ActualBudget } from "../nodes/ActualBudget/ActualBudget.node";
-import type { IExecuteFunctions } from "n8n-workflow";
+import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 import * as api from "@actual-app/api";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
@@ -27,7 +27,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     ];
 
     const node = new ActualBudget();
-    const executeFunctions: any = {
+    const executeFunctions = {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
         if (name === "operation") return "importTransactions";
@@ -39,20 +39,22 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       getCredentials: async () => ({ url: serverURL, password }),
       continueOnFail: () => false,
       helpers: {
-        returnJsonArray: (data: any) =>
-          Array.isArray(data) ? data.map((d: any) => ({ json: d })) : [{ json: data }],
-        constructExecutionMetaData: (data: any, _meta: any) => data,
+        returnJsonArray: (data: unknown) =>
+          Array.isArray(data)
+            ? data.map((d) => ({ json: d as IDataObject }))
+            : [{ json: data as IDataObject }],
+        constructExecutionMetaData: (data: unknown) => data,
       },
-    };
+    } as unknown as IExecuteFunctions;
 
-    const result = await node.execute.call(executeFunctions as unknown as IExecuteFunctions);
+    const result = await node.execute.call(executeFunctions);
 
     expect(result).toHaveLength(1);
     expect(result[0]).toHaveLength(1);
 
-    const output = result[0][0].json as any;
-    expect(output.errors).toHaveLength(0);
-    expect(output.added.length).toBeGreaterThan(0);
+    const output = result[0][0].json as Record<string, unknown>;
+    expect((output.errors as unknown[]).length).toBe(0);
+    expect((output.added as unknown[]).length).toBeGreaterThan(0);
   }, 30000);
 
   it("should reflect imported transactions in the budget", async () => {
@@ -60,7 +62,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     await api.init({ serverURL, password, dataDir });
     await api.downloadBudget(budgetId);
     const txns = await api.getTransactions(accountId, "2024-03-01", "2024-03-31");
-    const testTxn = txns.find((t: any) => t.notes === "Integration test transaction");
+    const testTxn = txns.find((t) => t.notes === "Integration test transaction");
     expect(testTxn).toBeDefined();
     expect(testTxn!.amount).toBe(-2500);
   }, 15000);
