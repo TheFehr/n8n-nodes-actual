@@ -21,6 +21,11 @@
     "dev": "n8n-node dev",
     "lint": "n8n-node lint",
     "lint:fix": "n8n-node lint --fix",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:pipeline": "bash scripts/full-test.sh",
+    "version:check": "node scripts/update-versions.mjs --check",
+    "version:update": "node scripts/update-versions.mjs",
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
@@ -43,7 +48,9 @@
     "eslint": "9.39.2",
     "prettier": "3.8.2",
     "release-it": "^20.0.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
   },
   "peerDependencies": {
     "n8n-workflow": "2.16.0"

@@ -9,3 +9,6 @@ yarn.lock
 
 .idea
 .tool-versions
+
+# Leftover local budget dirs from @actual-app/api test runs
+E2E-Test-Budget-*/

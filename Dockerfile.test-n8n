@@ -1,0 +1,10 @@
+ARG N8N_IMAGE=n8nio/n8n:latest
+
+FROM ${N8N_IMAGE}
+
+USER root
+WORKDIR /n8n-nodes-actual
+COPY package.json .
+RUN npm install --omit=dev --legacy-peer-deps
+RUN chown -R 1000:1000 /n8n-nodes-actual
+USER node
