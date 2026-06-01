@@ -33,7 +33,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         if (name === "operation") return "importTransactions";
         if (name === "budgetId") return budgetId;
         if (name === "accountId") return accountId;
-        if (name === "transactions") return transactions;
+        if (name === "transactions") return JSON.stringify(transactions);
         return undefined;
       },
       getCredentials: async () => ({ url: serverURL, password }),

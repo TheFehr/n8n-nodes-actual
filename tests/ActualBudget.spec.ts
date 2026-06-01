@@ -87,6 +87,21 @@ describe("ActualBudget", () => {
     expect(actualApi.importTransactions).toHaveBeenCalledWith("account-abc", transactions);
   });
 
+  it("should parse stringified JSON transactions", async () => {
+    const transactions = [{ date: "2024-02-01", amount: -750, notes: "Parsed from string" }];
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return JSON.stringify(transactions);
+      return undefined;
+    });
+
+    await node.execute.call(executeFunctions);
+
+    expect(actualApi.importTransactions).toHaveBeenCalledWith("account-abc", transactions);
+  });
+
   it("should call shutdown after successful execution", async () => {
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
