@@ -152,7 +152,8 @@ async function handleBudgetImport(
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const transactions = context.getNodeParameter('transactions', itemIndex) as ActualTransaction[];
+	const raw = context.getNodeParameter('transactions', itemIndex);
+	const transactions: ActualTransaction[] = typeof raw === 'string' ? JSON.parse(raw) : (raw as ActualTransaction[]);
 
 	return (await importTransactions(accountId, transactions)) as unknown as IDataObject;
 }

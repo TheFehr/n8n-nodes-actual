@@ -1,0 +1,74 @@
+name: Nightly Compatibility Check
+
+on:
+  schedule:
+    - cron: "34 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-and-run:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for updates
+        id: check_updates
+        run: |
+          if npm run version:check; then
+            echo "updates_found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "updates_found=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update files
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: |
+          npm run version:update
+          npm install
+
+      - name: Run pipeline
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: npm run test:pipeline
+
+      - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_found == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: nightly compatibility updates"
+          title: "Nightly Compatibility Updates"
+          body: "Automated nightly updates for compatibility versions."
+          branch: nightly-updates
+          base: main
+          delete-branch: true
+          sign-commits: true
+
+      - name: Enable Auto-Merge
+        if: steps.cpr.outputs.pull-request-operation == 'created'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}"
