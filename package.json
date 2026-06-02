@@ -46,9 +46,9 @@
     "typescript": "5.9.3"
   },
   "peerDependencies": {
-    "n8n-workflow": "*"
+    "n8n-workflow": "2.16.0"
   },
   "dependencies": {
-    "@actual-app/api": "26.5.0"
+    "@actual-app/api": "26.6.0"
   }
 }
