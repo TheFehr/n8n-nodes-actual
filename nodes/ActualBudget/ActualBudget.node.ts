@@ -169,10 +169,8 @@ export class ActualBudget implements INodeType {
 				let elementData;
 				switch (action) {
 					case 'getBudgetMonth':
-						if (itemIndex === 0) {
-							elementData = await handleGetBudgetMonth(this, itemIndex);
-							returnData.push(elementData);
-						}
+						elementData = await handleGetBudgetMonth(this, itemIndex);
+						returnData.push(elementData);
 						break;
 					case 'importTransactions':
 						elementData = await handleBudgetImport(this, itemIndex);

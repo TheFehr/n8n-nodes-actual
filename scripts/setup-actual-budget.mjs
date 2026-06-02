@@ -42,15 +42,19 @@ if (accounts.length === 0) {
 
 const accountId = accounts[0].id;
 
-// Find or create a test expense category
+// Find or create a dedicated E2E test expense category (never reuse an arbitrary existing one)
 const allCategories = await api.getCategories();
-const expenseCategories = allCategories.filter((c) => c.group_id && !c.is_income);
+const existingCategory = allCategories.find((c) => c.name === "E2E Test Expenses" && c.group_id && !c.is_income);
 let categoryId;
-if (expenseCategories.length === 0) {
-  const groupId = await api.createCategoryGroup({ name: "E2E Test", is_income: false, hidden: false });
-  categoryId = await api.createCategory({ name: "E2E Test Expenses", group_id: groupId, is_income: false, hidden: false });
+if (existingCategory) {
+  categoryId = existingCategory.id;
 } else {
-  categoryId = expenseCategories[0].id;
+  const allGroups = await api.getCategoryGroups();
+  const existingGroup = allGroups.find((g) => g.name === "E2E Test");
+  const groupId = existingGroup
+    ? existingGroup.id
+    : await api.createCategoryGroup({ name: "E2E Test", is_income: false, hidden: false });
+  categoryId = await api.createCategory({ name: "E2E Test Expenses", group_id: groupId, is_income: false, hidden: false });
 }
 
 await api.shutdown();

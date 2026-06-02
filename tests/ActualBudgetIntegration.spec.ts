@@ -14,7 +14,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
   const budgetId = process.env.ACTUAL_TEST_BUDGET_ID!;
   const accountId = process.env.ACTUAL_TEST_ACCOUNT_ID!;
   const categoryId = process.env.ACTUAL_TEST_CATEGORY_ID!;
-  const testMonth = process.env.ACTUAL_TEST_MONTH || new Date().toISOString().slice(0, 7);
+  const testMonth = process.env.ACTUAL_TEST_MONTH ?? "2024-01";
 
   const dataDir = mkdtempSync(join(tmpdir(), "actual-integration-"));
 

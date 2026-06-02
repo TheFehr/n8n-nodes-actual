@@ -240,7 +240,7 @@ describe("ActualBudget", () => {
       expect(result[0][0].json).toEqual(budgetData);
     });
 
-    it("should output exactly one item even with multiple input items", async () => {
+    it("should call getBudgetMonth once per input item", async () => {
       executeFunctions.getInputData.mockReturnValue([{ json: {} }, { json: {} }, { json: {} }]);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getBudgetMonth";
@@ -251,8 +251,8 @@ describe("ActualBudget", () => {
 
       const result = await node.execute.call(executeFunctions);
 
-      expect(actualApi.getBudgetMonth).toHaveBeenCalledTimes(1);
-      expect(result[0]).toHaveLength(1);
+      expect(actualApi.getBudgetMonth).toHaveBeenCalledTimes(3);
+      expect(result[0]).toHaveLength(3);
     });
 
     it("should call shutdown before re-throwing on getBudgetMonth error", async () => {
