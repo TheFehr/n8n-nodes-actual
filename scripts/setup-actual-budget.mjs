@@ -42,7 +42,18 @@ if (accounts.length === 0) {
 
 const accountId = accounts[0].id;
 
+// Find or create a test expense category
+const allCategories = await api.getCategories();
+const expenseCategories = allCategories.filter((c) => c.group_id && !c.is_income);
+let categoryId;
+if (expenseCategories.length === 0) {
+  const groupId = await api.createCategoryGroup({ name: "E2E Test", is_income: false, hidden: false });
+  categoryId = await api.createCategory({ name: "E2E Test Expenses", group_id: groupId, is_income: false, hidden: false });
+} else {
+  categoryId = expenseCategories[0].id;
+}
+
 await api.shutdown();
 
 // Write JSON on its own line so callers can reliably extract it with `tail -1`
-process.stdout.write(JSON.stringify({ budgetId, accountId }) + "\n");
+process.stdout.write(JSON.stringify({ budgetId, accountId, categoryId }) + "\n");
