@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # Load fnm so that `node` and `npm` are on PATH (non-interactive bash skips .bashrc)
 if command -v fnm &>/dev/null; then
@@ -13,6 +13,7 @@ PACKAGE_NAME="n8n-nodes-actual"
 # EXIT trap for teardown
 on_exit() {
     EXIT_CODE=$?
+    set +e
     if [ $EXIT_CODE -ne 0 ]; then
         echo "Integration test failed with exit code $EXIT_CODE"
         if [ -f workflow_output.txt ]; then
@@ -21,14 +22,14 @@ on_exit() {
             echo "--------------------------------"
         fi
         echo "--- Actual Budget Logs ---"
-        docker compose -f docker-compose.test.yml logs actual
+        docker compose -f docker-compose.test.yml logs actual || true
         echo "--------------------------"
         echo "--- n8n Logs ---"
-        docker compose -f docker-compose.test.yml logs n8n
+        docker compose -f docker-compose.test.yml logs n8n || true
         echo "----------------"
     fi
     echo "Cleaning up..."
-    docker compose -f docker-compose.test.yml down -v
+    docker compose -f docker-compose.test.yml down -v || true
     rm -f workflow_output.txt tests/workflows/integration_test.json
     exit $EXIT_CODE
 }
@@ -53,7 +54,7 @@ wait_for_service() {
     local attempt=1
     echo "Waiting for $name to start..."
     until [ $attempt -gt $max_attempts ]; do
-        status=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
+        status=$(curl -s --connect-timeout 2 --max-time 5 -o /dev/null -w "%{http_code}" "$url" || echo "000")
         if [[ "$status" =~ ^2 ]]; then
             echo "$name is ready!"
             return 0

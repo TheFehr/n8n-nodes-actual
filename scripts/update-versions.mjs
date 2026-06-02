@@ -7,7 +7,7 @@ async function getLatestNpmVersion(pkg) {
   if (process.env.NPM_TOKEN) {
     headers["Authorization"] = `Bearer ${process.env.NPM_TOKEN}`;
   }
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`Failed to fetch ${pkg} from npm: ${res.status} ${res.statusText}`);
   const data = await res.json();
   return data.version;
@@ -17,7 +17,7 @@ async function updatePackageJson(n8nWorkflowVersion, actualVersion, dryRun) {
   const path = join(process.cwd(), "package.json");
   const pkg = JSON.parse(readFileSync(path, "utf8"));
 
-  const newN8nPeer = n8nWorkflowVersion;
+  const newN8nPeer = `^${n8nWorkflowVersion}`;
   const newActual = actualVersion;
   const oldN8nPeer = pkg.peerDependencies?.["n8n-workflow"];
   const oldActual = pkg.dependencies?.["@actual-app/api"];
@@ -47,8 +47,10 @@ async function updateReadme(n8nVersion, actualVersion, dryRun) {
   const path = join(process.cwd(), "README.md");
   let content = readFileSync(path, "utf8");
 
-  const regex =
-    /This was developed for version ([\d.]+) of n8n and version ([\d.]+) of Actual\./;
+  const semver = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`;
+  const regex = new RegExp(
+    `This was developed for version (${semver}) of n8n and version (${semver}) of Actual\\.`,
+  );
   const replacement = `This was developed for version ${n8nVersion} of n8n and version ${actualVersion} of Actual.`;
   const match = content.match(regex);
 
