@@ -8,6 +8,20 @@ vi.mock("@actual-app/api", () => ({
   importTransactions: vi
     .fn()
     .mockResolvedValue({ added: ["tx-001"], updated: [], updatedPreview: [], errors: [] }),
+  getBudgetMonth: vi.fn().mockResolvedValue({
+    month: "2024-01",
+    incomeAvailable: 500000,
+    lastMonthOverspent: 0,
+    forNextMonth: 0,
+    totalBudgeted: 300000,
+    toBudget: 200000,
+    fromLastMonth: 0,
+    totalIncome: 500000,
+    totalSpent: -300000,
+    totalBalance: 200000,
+    categoryGroups: [],
+  }),
+  setBudgetAmount: vi.fn().mockResolvedValue(undefined),
   shutdown: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -183,5 +197,168 @@ describe("ActualBudget", () => {
     const result = await node.execute.call(executeFunctions);
 
     expect(result[0][0].json).toEqual(importResult);
+  });
+
+  describe("getBudgetMonth operation", () => {
+    it("should call getBudgetMonth with the correct month parameter", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getBudgetMonth";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.getBudgetMonth).toHaveBeenCalledWith("2024-03");
+    });
+
+    it("should return getBudgetMonth result in output", async () => {
+      const budgetData = {
+        month: "2024-03",
+        toBudget: 150000,
+        totalIncome: 600000,
+        totalSpent: -450000,
+        totalBalance: 150000,
+        incomeAvailable: 600000,
+        lastMonthOverspent: 0,
+        forNextMonth: 0,
+        totalBudgeted: 450000,
+        fromLastMonth: 0,
+        categoryGroups: [{ id: "grp-1", name: "Food" }],
+      };
+      vi.mocked(actualApi.getBudgetMonth).mockResolvedValueOnce(budgetData as unknown);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getBudgetMonth";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result[0][0].json).toEqual(budgetData);
+    });
+
+    it("should output exactly one item even with multiple input items", async () => {
+      executeFunctions.getInputData.mockReturnValue([{ json: {} }, { json: {} }, { json: {} }]);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getBudgetMonth";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getBudgetMonth).toHaveBeenCalledTimes(1);
+      expect(result[0]).toHaveLength(1);
+    });
+
+    it("should call shutdown before re-throwing on getBudgetMonth error", async () => {
+      vi.mocked(actualApi.getBudgetMonth).mockRejectedValueOnce(new Error("month not found"));
+      executeFunctions.continueOnFail.mockReturnValue(false);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getBudgetMonth";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow("month not found");
+
+      expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+  });
+
+  describe("setBudgetAmount operation", () => {
+    it("should call setBudgetAmount with correct month, categoryId, and amount", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "amount") return 100000;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.setBudgetAmount).toHaveBeenCalledWith("2024-03", "cat-abc", 100000);
+    });
+
+    it("should return echo object with written parameters", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "amount") return 100000;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result[0][0].json).toEqual({ success: true, month: "2024-03", categoryId: "cat-abc", amount: 100000 });
+    });
+
+    it("should call setBudgetAmount once per input item", async () => {
+      const items = [
+        { month: "2024-03", categoryId: "cat-1", amount: 50000 },
+        { month: "2024-03", categoryId: "cat-2", amount: 75000 },
+        { month: "2024-03", categoryId: "cat-3", amount: 25000 },
+      ];
+      executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
+      executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return items[itemIndex].month;
+        if (name === "categoryId") return items[itemIndex].categoryId;
+        if (name === "amount") return items[itemIndex].amount;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.setBudgetAmount).toHaveBeenCalledTimes(3);
+      expect(actualApi.setBudgetAmount).toHaveBeenNthCalledWith(1, "2024-03", "cat-1", 50000);
+      expect(actualApi.setBudgetAmount).toHaveBeenNthCalledWith(2, "2024-03", "cat-2", 75000);
+      expect(actualApi.setBudgetAmount).toHaveBeenNthCalledWith(3, "2024-03", "cat-3", 25000);
+    });
+
+    it("should call shutdown before re-throwing on setBudgetAmount error", async () => {
+      vi.mocked(actualApi.setBudgetAmount).mockRejectedValueOnce(new Error("write failed"));
+      executeFunctions.continueOnFail.mockReturnValue(false);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "amount") return 100000;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow("write failed");
+
+      expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+
+    it("should include error in output when continueOnFail=true", async () => {
+      vi.mocked(actualApi.setBudgetAmount).mockRejectedValueOnce(new Error("write failed"));
+      executeFunctions.continueOnFail.mockReturnValue(true);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "amount") return 100000;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result).toBeDefined();
+      expect(actualApi.shutdown).toHaveBeenCalled();
+    });
   });
 });
