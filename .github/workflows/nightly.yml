@@ -1,0 +1,82 @@
+name: Nightly Compatibility Check
+
+on:
+  schedule:
+    - cron: "34 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-and-run:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for updates
+        id: check_updates
+        run: |
+          set +e
+          npm run version:check
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "updates_found=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" -eq 2 ]; then
+            echo "updates_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version:check failed (exit $code)" && exit "$code"
+          fi
+
+      - name: Update files
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: |
+          npm run version:update
+          npm install
+
+      - name: Run pipeline
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: npm run test:pipeline
+
+      - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_found == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: nightly compatibility updates"
+          title: "Nightly Compatibility Updates"
+          body: "Automated nightly updates for compatibility versions."
+          branch: nightly-updates
+          base: main
+          delete-branch: true
+          sign-commits: true
+
+      - name: Enable Auto-Merge
+        if: steps.cpr.outputs.pull-request-operation == 'created'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}"
