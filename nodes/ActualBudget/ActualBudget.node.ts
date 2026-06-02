@@ -154,7 +154,16 @@ async function handleBudgetImport(
 ): Promise<IDataObject> {
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
 	const raw = context.getNodeParameter('transactions', itemIndex);
-	const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+	let parsed: unknown;
+	if (typeof raw === 'string') {
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			throw new NodeOperationError(context.getNode(), 'Transactions field contains invalid JSON');
+		}
+	} else {
+		parsed = raw;
+	}
 	if (!Array.isArray(parsed)) {
 		throw new NodeOperationError(context.getNode(), `"transactions" must be a JSON array, got ${typeof parsed}`);
 	}

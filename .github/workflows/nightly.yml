@@ -37,10 +37,16 @@ jobs:
       - name: Check for updates
         id: check_updates
         run: |
-          if npm run version:check; then
+          set +e
+          npm run version:check
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
             echo "updates_found=false" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$code" -eq 2 ]; then
             echo "updates_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version:check failed (exit $code)" && exit "$code"
           fi
 
       - name: Update files

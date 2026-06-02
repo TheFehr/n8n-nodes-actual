@@ -83,7 +83,7 @@ async function main() {
     if (anyUpdated) {
       if (dryRun) {
         console.log("\nUpdates available. Run 'npm run version:update' to apply.");
-        process.exit(1);
+        process.exit(2); // 2 = updates found; 1 = reserved for genuine errors
       } else {
         console.log("\nFiles updated successfully.");
       }
