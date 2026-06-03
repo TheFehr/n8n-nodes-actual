@@ -17,7 +17,11 @@ Actual is a local-first personal finance tool. It is 100% free and open-source, 
 Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation.
 
 ## Operations
-Currently **only** importTransactions is implemented.
+
+- **Get Budget Month** — retrieve budget data (income, spending, balances per category) for a given month
+- **Get Transactions** — fetch transactions from an account within a date range
+- **Import Transactions** — import a list of transactions into an account
+- **Set Budget Amount** — set the budgeted amount for a category in a given month
 
 
 ## Credentials
