@@ -140,6 +140,11 @@ export class ActualBudget implements INodeType {
 				type: 'json',
 				default: '[]',
 				required: true,
+				displayOptions: {
+					show: {
+						operation: ['importTransactions'],
+					},
+				},
 			},
 			{
 				displayName: 'Month',
@@ -242,6 +247,16 @@ async function handleGetTransactions(
 	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
 	const startDate = context.getNodeParameter('startDate', itemIndex) as string;
 	const endDate = context.getNodeParameter('endDate', itemIndex) as string;
+	const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+	if (!datePattern.test(startDate)) {
+		throw new NodeOperationError(context.getNode(), `"startDate" must be in YYYY-MM-DD format, got "${startDate}"`);
+	}
+	if (!datePattern.test(endDate)) {
+		throw new NodeOperationError(context.getNode(), `"endDate" must be in YYYY-MM-DD format, got "${endDate}"`);
+	}
+	if (startDate > endDate) {
+		throw new NodeOperationError(context.getNode(), `"startDate" (${startDate}) must be on or before "endDate" (${endDate})`);
+	}
 	return (await getTransactions(accountId, startDate, endDate)) as unknown as IDataObject[];
 }
 

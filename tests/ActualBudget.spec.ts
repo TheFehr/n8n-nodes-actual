@@ -45,6 +45,7 @@ describe("ActualBudget", () => {
         .fn()
         .mockResolvedValue({ url: "http://localhost:5006", password: "test-password" }),
       continueOnFail: vi.fn().mockReturnValue(false),
+      getNode: vi.fn().mockReturnValue({ name: "ActualBudget" }),
       helpers: {
         returnJsonArray: vi.fn((data: unknown) =>
           Array.isArray(data)
@@ -296,6 +297,45 @@ describe("ActualBudget", () => {
       await expect(node.execute.call(executeFunctions)).rejects.toThrow("account not found");
 
       expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+
+    it("should throw on invalid startDate format", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "01/01/2024";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*YYYY-MM-DD/);
+    });
+
+    it("should throw on invalid endDate format", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-01-01";
+        if (name === "endDate") return "not-a-date";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/endDate.*YYYY-MM-DD/);
+    });
+
+    it("should throw when startDate is after endDate", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-02-01";
+        if (name === "endDate") return "2024-01-01";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*endDate/);
     });
   });
 
