@@ -1,6 +1,6 @@
 /**
- * Creates (or reuses) an E2E test budget and account on the Actual Budget server.
- * Outputs {"budgetId":"...","accountId":"..."} to stdout.
+ * Creates (or reuses) an E2E test budget, account, and expense category on the Actual Budget server.
+ * Outputs {"budgetId":"...","accountId":"...","categoryId":"..."} to stdout.
  */
 import * as api from "@actual-app/api";
 import { mkdtempSync } from "fs";
