@@ -21,6 +21,10 @@ vi.mock("@actual-app/api", () => ({
     totalBalance: 200000,
     categoryGroups: [],
   }),
+  getTransactions: vi.fn().mockResolvedValue([
+    { id: "tx-001", date: "2024-01-15", amount: -1000, account: "acc-1" },
+    { id: "tx-002", date: "2024-01-20", amount: -500, account: "acc-1" },
+  ]),
   setBudgetAmount: vi.fn().mockResolvedValue(undefined),
   shutdown: vi.fn().mockResolvedValue(undefined),
 }));
@@ -41,6 +45,7 @@ describe("ActualBudget", () => {
         .fn()
         .mockResolvedValue({ url: "http://localhost:5006", password: "test-password" }),
       continueOnFail: vi.fn().mockReturnValue(false),
+      getNode: vi.fn().mockReturnValue({ name: "ActualBudget" }),
       helpers: {
         returnJsonArray: vi.fn((data: unknown) =>
           Array.isArray(data)
@@ -197,6 +202,161 @@ describe("ActualBudget", () => {
     const result = await node.execute.call(executeFunctions);
 
     expect(result[0][0].json).toEqual(importResult);
+  });
+
+  describe("getTransactions operation", () => {
+    it("should call getTransactions with correct accountId, startDate, and endDate", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-01-01";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.getTransactions).toHaveBeenCalledWith("acc-abc", "2024-01-01", "2024-01-31");
+    });
+
+    it("should return each transaction as a separate output item", async () => {
+      const transactions = [
+        { id: "tx-1", date: "2024-01-10", amount: -2000, account: "acc-abc" },
+        { id: "tx-2", date: "2024-01-15", amount: -3000, account: "acc-abc" },
+        { id: "tx-3", date: "2024-01-20", amount: 5000, account: "acc-abc" },
+      ];
+      vi.mocked(actualApi.getTransactions).mockResolvedValueOnce(transactions as unknown);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-01-01";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result[0]).toHaveLength(3);
+      expect(result[0][0].json).toEqual(transactions[0]);
+      expect(result[0][1].json).toEqual(transactions[1]);
+      expect(result[0][2].json).toEqual(transactions[2]);
+    });
+
+    it("should return empty output when no transactions found", async () => {
+      vi.mocked(actualApi.getTransactions).mockResolvedValueOnce([]);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-01-01";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result[0]).toHaveLength(0);
+    });
+
+    it("should call getTransactions once per input item", async () => {
+      const items = [
+        { accountId: "acc-1", startDate: "2024-01-01", endDate: "2024-01-31" },
+        { accountId: "acc-2", startDate: "2024-02-01", endDate: "2024-02-29" },
+      ];
+      executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
+      executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return items[itemIndex].accountId;
+        if (name === "startDate") return items[itemIndex].startDate;
+        if (name === "endDate") return items[itemIndex].endDate;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.getTransactions).toHaveBeenCalledTimes(2);
+      expect(actualApi.getTransactions).toHaveBeenNthCalledWith(1, "acc-1", "2024-01-01", "2024-01-31");
+      expect(actualApi.getTransactions).toHaveBeenNthCalledWith(2, "acc-2", "2024-02-01", "2024-02-29");
+    });
+
+    it("should call shutdown before re-throwing on getTransactions error", async () => {
+      vi.mocked(actualApi.getTransactions).mockRejectedValueOnce(new Error("account not found"));
+      executeFunctions.continueOnFail.mockReturnValue(false);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-01-01";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow("account not found");
+
+      expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+
+    it("should throw on invalid startDate format", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "01/01/2024";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*YYYY-MM-DD/);
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
+    });
+
+    it("should throw on invalid endDate format", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-01-01";
+        if (name === "endDate") return "not-a-date";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/endDate.*YYYY-MM-DD/);
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
+    });
+
+    it("should throw when startDate is after endDate", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "2024-02-01";
+        if (name === "endDate") return "2024-01-01";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*endDate/);
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
+    });
+
+    it("should capture validation error in output when continueOnFail=true", async () => {
+      executeFunctions.continueOnFail.mockReturnValue(true);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "01/01/2024";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result).toBeDefined();
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
+    });
   });
 
   describe("getBudgetMonth operation", () => {
