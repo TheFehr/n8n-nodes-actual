@@ -12,6 +12,8 @@ import {
 	init,
 	downloadBudget,
 	importTransactions,
+	getBudgetMonth,
+	setBudgetAmount,
 	shutdown,
 } from '@actual-app/api';
 
@@ -68,9 +70,19 @@ export class ActualBudget implements INodeType {
 				type: 'options',
 				options: [
 					{
+						name: 'Get Budget Month',
+						value: 'getBudgetMonth',
+						action: 'Get budget data for a specific month',
+					},
+					{
 						name: 'Import Transactions',
 						value: 'importTransactions',
 						action: 'Import a list of transactions into your budget',
+					},
+					{
+						name: 'Set Budget Amount',
+						value: 'setBudgetAmount',
+						action: 'Set the budget amount for a category in a specific month',
 					},
 				],
 				default: 'importTransactions',
@@ -97,6 +109,45 @@ export class ActualBudget implements INodeType {
 				default: '[]',
 				required: true,
 			},
+			{
+				displayName: 'Month',
+				name: 'month',
+				type: 'string',
+				default: '',
+				required: true,
+				description: 'Month in YYYY-MM format',
+				displayOptions: {
+					show: {
+						operation: ['getBudgetMonth', 'setBudgetAmount'],
+					},
+				},
+			},
+			{
+				displayName: 'Category ID',
+				name: 'categoryId',
+				type: 'string',
+				default: '',
+				required: true,
+				description: 'The ID of the budget category',
+				displayOptions: {
+					show: {
+						operation: ['setBudgetAmount'],
+					},
+				},
+			},
+			{
+				displayName: 'Amount',
+				name: 'amount',
+				type: 'number',
+				default: 0,
+				required: true,
+				description: 'Budget amount in millicents (e.g. 100000 = $100.00)',
+				displayOptions: {
+					show: {
+						operation: ['setBudgetAmount'],
+					},
+				},
+			},
 		],
 		usableAsTool: undefined,
 	};
@@ -117,8 +168,16 @@ export class ActualBudget implements INodeType {
 			try {
 				let elementData;
 				switch (action) {
+					case 'getBudgetMonth':
+						elementData = await handleGetBudgetMonth(this, itemIndex);
+						returnData.push(elementData);
+						break;
 					case 'importTransactions':
 						elementData = await handleBudgetImport(this, itemIndex);
+						returnData.push(elementData);
+						break;
+					case 'setBudgetAmount':
+						elementData = await handleSetBudgetAmount(this, itemIndex);
 						returnData.push(elementData);
 						break;
 				}
@@ -139,6 +198,25 @@ export class ActualBudget implements INodeType {
 		await shutdown();
 		return [this.helpers.returnJsonArray(returnData)];
 	}
+}
+
+async function handleGetBudgetMonth(
+	context: IExecuteFunctions,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const month = context.getNodeParameter('month', itemIndex) as string;
+	return (await getBudgetMonth(month)) as unknown as IDataObject;
+}
+
+async function handleSetBudgetAmount(
+	context: IExecuteFunctions,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const month = context.getNodeParameter('month', itemIndex) as string;
+	const categoryId = context.getNodeParameter('categoryId', itemIndex) as string;
+	const amount = context.getNodeParameter('amount', itemIndex) as number;
+	await setBudgetAmount(month, categoryId, amount);
+	return { success: true, month, categoryId, amount };
 }
 
 async function initializeActualBudget(auth: Credentials): Promise<void> {
