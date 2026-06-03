@@ -12,6 +12,7 @@ import {
 	init,
 	downloadBudget,
 	importTransactions,
+	getTransactions,
 	getBudgetMonth,
 	setBudgetAmount,
 	shutdown,
@@ -75,6 +76,11 @@ export class ActualBudget implements INodeType {
 						action: 'Get budget data for a specific month',
 					},
 					{
+						name: 'Get Transactions',
+						value: 'getTransactions',
+						action: 'Get transactions from an account within a date range',
+					},
+					{
 						name: 'Import Transactions',
 						value: 'importTransactions',
 						action: 'Import a list of transactions into your budget',
@@ -97,10 +103,36 @@ export class ActualBudget implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
-						operation: ['importTransactions'],
+						operation: ['importTransactions', 'getTransactions'],
 					},
 				},
 				required: true,
+			},
+			{
+				displayName: 'Start Date',
+				name: 'startDate',
+				type: 'string',
+				default: '',
+				required: true,
+				description: 'Start date in YYYY-MM-DD format (inclusive)',
+				displayOptions: {
+					show: {
+						operation: ['getTransactions'],
+					},
+				},
+			},
+			{
+				displayName: 'End Date',
+				name: 'endDate',
+				type: 'string',
+				default: '',
+				required: true,
+				description: 'End date in YYYY-MM-DD format (inclusive)',
+				displayOptions: {
+					show: {
+						operation: ['getTransactions'],
+					},
+				},
 			},
 			{
 				displayName: 'Transactions',
@@ -172,6 +204,9 @@ export class ActualBudget implements INodeType {
 						elementData = await handleGetBudgetMonth(this, itemIndex);
 						returnData.push(elementData);
 						break;
+					case 'getTransactions':
+						returnData.push(...(await handleGetTransactions(this, itemIndex)));
+						break;
 					case 'importTransactions':
 						elementData = await handleBudgetImport(this, itemIndex);
 						returnData.push(elementData);
@@ -198,6 +233,16 @@ export class ActualBudget implements INodeType {
 		await shutdown();
 		return [this.helpers.returnJsonArray(returnData)];
 	}
+}
+
+async function handleGetTransactions(
+	context: IExecuteFunctions,
+	itemIndex: number,
+): Promise<IDataObject[]> {
+	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
+	const startDate = context.getNodeParameter('startDate', itemIndex) as string;
+	const endDate = context.getNodeParameter('endDate', itemIndex) as string;
+	return (await getTransactions(accountId, startDate, endDate)) as unknown as IDataObject[];
 }
 
 async function handleGetBudgetMonth(

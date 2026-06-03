@@ -138,4 +138,36 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     expect(category).toBeDefined();
     expect((category as Record<string, unknown>).budgeted).toBe(50000);
   }, 30000);
+
+  it("should get transactions via the node", async () => {
+    const node = new ActualBudget();
+    const executeFunctions = {
+      getInputData: () => [{ json: {} }],
+      getNodeParameter: (name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return budgetId;
+        if (name === "accountId") return accountId;
+        if (name === "startDate") return "2024-03-01";
+        if (name === "endDate") return "2024-03-31";
+        return undefined;
+      },
+      getCredentials: async () => ({ url: serverURL, password }),
+      continueOnFail: () => false,
+      helpers: {
+        returnJsonArray: (data: unknown) =>
+          Array.isArray(data)
+            ? data.map((d) => ({ json: d as IDataObject }))
+            : [{ json: data as IDataObject }],
+        constructExecutionMetaData: (data: unknown) => data,
+      },
+    } as unknown as IExecuteFunctions;
+
+    const result = await node.execute.call(executeFunctions);
+
+    // The "should import transactions via the node" test imported a transaction on 2024-03-01
+    expect(result[0].length).toBeGreaterThan(0);
+    const txn = result[0].find((item) => (item.json as Record<string, unknown>).notes === "Integration test transaction");
+    expect(txn).toBeDefined();
+    expect((txn!.json as Record<string, unknown>).amount).toBe(-2500);
+  }, 15000);
 });
