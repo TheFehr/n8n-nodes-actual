@@ -340,6 +340,23 @@ describe("ActualBudget", () => {
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*endDate/);
       expect(actualApi.getTransactions).not.toHaveBeenCalled();
     });
+
+    it("should capture validation error in output when continueOnFail=true", async () => {
+      executeFunctions.continueOnFail.mockReturnValue(true);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTransactions";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-abc";
+        if (name === "startDate") return "01/01/2024";
+        if (name === "endDate") return "2024-01-31";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result).toBeDefined();
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
+    });
   });
 
   describe("getBudgetMonth operation", () => {
