@@ -310,6 +310,7 @@ describe("ActualBudget", () => {
       });
 
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*YYYY-MM-DD/);
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
     });
 
     it("should throw on invalid endDate format", async () => {
@@ -323,6 +324,7 @@ describe("ActualBudget", () => {
       });
 
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/endDate.*YYYY-MM-DD/);
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
     });
 
     it("should throw when startDate is after endDate", async () => {
@@ -336,6 +338,7 @@ describe("ActualBudget", () => {
       });
 
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/startDate.*endDate/);
+      expect(actualApi.getTransactions).not.toHaveBeenCalled();
     });
   });
 
