@@ -57,6 +57,30 @@ jobs:
           npm run version:update
           npm install
 
+      - name: Detect change type
+        if: steps.check_updates.outputs.updates_found == 'true'
+        id: change_type
+        run: |
+          RELEASE=false
+
+          # Any @actual-app/api change warrants a release
+          if git diff package.json | grep -q '"@actual-app/api"'; then
+            RELEASE=true
+          fi
+
+          # Major or minor n8n-workflow bump warrants a release
+          if git diff package.json | grep -q '"n8n-workflow"'; then
+            OLD_N8N=$(git show HEAD:package.json | jq -r '.peerDependencies["n8n-workflow"]' | sed 's/^[^0-9]*//')
+            NEW_N8N=$(jq -r '.peerDependencies["n8n-workflow"]' package.json | sed 's/^[^0-9]*//')
+            OLD_MM="${OLD_N8N%.*}"
+            NEW_MM="${NEW_N8N%.*}"
+            if [ "$OLD_MM" != "$NEW_MM" ]; then
+              RELEASE=true
+            fi
+          fi
+
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+
       - name: Run pipeline
         if: steps.check_updates.outputs.updates_found == 'true'
         run: npm run test:pipeline
@@ -68,15 +92,17 @@ jobs:
         with:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           commit-message: "chore: nightly compatibility updates"
-          title: "Nightly Compatibility Updates"
+          title: >-
+            Nightly Compatibility Updates${{ steps.change_type.outputs.release == 'false' && ' [no-release]' || '' }}
           body: "Automated nightly updates for compatibility versions."
           branch: nightly-updates
           base: main
           delete-branch: true
           sign-commits: true
+          update-pull-request-title: true
 
       - name: Enable Auto-Merge
-        if: steps.cpr.outputs.pull-request-operation == 'created'
+        if: steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
         run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}"
