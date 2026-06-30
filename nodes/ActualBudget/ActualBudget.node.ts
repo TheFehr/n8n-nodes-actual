@@ -35,6 +35,21 @@ interface Credentials {
 	password: string;
 }
 
+// @actual-app/api stores its session (DB connection, sync clock) in a module-level
+// singleton shared by every execution of this node in the process. Running two
+// executions concurrently lets one's init()/shutdown() tear down state the other is
+// mid-operation on, so all executions are funneled through this queue to run one at a time.
+let executionQueue: Promise<unknown> = Promise.resolve();
+
+function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+	const result = executionQueue.then(fn, fn);
+	executionQueue = result.then(
+		() => undefined,
+		() => undefined,
+	);
+	return result;
+}
+
 export class ActualBudget implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ActualBudget',
@@ -190,54 +205,61 @@ export class ActualBudget implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const returnData = [];
-
-		const action = this.getNodeParameter('operation', 0) as string;
-		const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
-		await initializeActualBudget(auth);
-
-		const budgetId = this.getNodeParameter('budgetId', 0) as string;
-
-		await downloadBudget(budgetId);
-
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-			try {
-				let elementData;
-				switch (action) {
-					case 'getBudgetMonth':
-						elementData = await handleGetBudgetMonth(this, itemIndex);
-						returnData.push(elementData);
-						break;
-					case 'getTransactions':
-						returnData.push(...(await handleGetTransactions(this, itemIndex)));
-						break;
-					case 'importTransactions':
-						elementData = await handleBudgetImport(this, itemIndex);
-						returnData.push(elementData);
-						break;
-					case 'setBudgetAmount':
-						elementData = await handleSetBudgetAmount(this, itemIndex);
-						returnData.push(elementData);
-						break;
-				}
-			} catch (error) {
-				if (this.continueOnFail()) {
-					const executionData = this.helpers.constructExecutionMetaData(
-						this.helpers.returnJsonArray({ error: error.message }),
-						{ itemData: { item: itemIndex } },
-					);
-					returnData.push(...executionData);
-					continue;
-				}
-				await shutdown();
-				throw error;
-			}
-		}
-
-		await shutdown();
-		return [this.helpers.returnJsonArray(returnData)];
+		// @actual-app/api keeps its session (DB connection, sync clock) in a module-level
+		// singleton, so two executions running at once in this process would tear down or
+		// reinitialize each other's state mid-operation. Serialize executions to avoid that.
+		return runExclusive(() => runActualBudget(this));
 	}
+}
+
+async function runActualBudget(context: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+	const items = context.getInputData();
+	const returnData = [];
+
+	const action = context.getNodeParameter('operation', 0) as string;
+	const auth = (await context.getCredentials('actualBudgetApi', 0)) as Credentials;
+	await initializeActualBudget(auth);
+
+	const budgetId = context.getNodeParameter('budgetId', 0) as string;
+
+	await downloadBudget(budgetId);
+
+	for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+		try {
+			let elementData;
+			switch (action) {
+				case 'getBudgetMonth':
+					elementData = await handleGetBudgetMonth(context, itemIndex);
+					returnData.push(elementData);
+					break;
+				case 'getTransactions':
+					returnData.push(...(await handleGetTransactions(context, itemIndex)));
+					break;
+				case 'importTransactions':
+					elementData = await handleBudgetImport(context, itemIndex);
+					returnData.push(elementData);
+					break;
+				case 'setBudgetAmount':
+					elementData = await handleSetBudgetAmount(context, itemIndex);
+					returnData.push(elementData);
+					break;
+			}
+		} catch (error) {
+			if (context.continueOnFail()) {
+				const executionData = context.helpers.constructExecutionMetaData(
+					context.helpers.returnJsonArray({ error: error.message }),
+					{ itemData: { item: itemIndex } },
+				);
+				returnData.push(...executionData);
+				continue;
+			}
+			await shutdown();
+			throw error;
+		}
+	}
+
+	await shutdown();
+	return [context.helpers.returnJsonArray(returnData)];
 }
 
 async function handleGetTransactions(
