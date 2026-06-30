@@ -220,46 +220,48 @@ async function runActualBudget(context: IExecuteFunctions): Promise<INodeExecuti
 	const auth = (await context.getCredentials('actualBudgetApi', 0)) as Credentials;
 	await initializeActualBudget(auth);
 
-	const budgetId = context.getNodeParameter('budgetId', 0) as string;
+	try {
+		const budgetId = context.getNodeParameter('budgetId', 0) as string;
 
-	await downloadBudget(budgetId);
+		await downloadBudget(budgetId);
 
-	for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-		try {
-			let elementData;
-			switch (action) {
-				case 'getBudgetMonth':
-					elementData = await handleGetBudgetMonth(context, itemIndex);
-					returnData.push(elementData);
-					break;
-				case 'getTransactions':
-					returnData.push(...(await handleGetTransactions(context, itemIndex)));
-					break;
-				case 'importTransactions':
-					elementData = await handleBudgetImport(context, itemIndex);
-					returnData.push(elementData);
-					break;
-				case 'setBudgetAmount':
-					elementData = await handleSetBudgetAmount(context, itemIndex);
-					returnData.push(elementData);
-					break;
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+			try {
+				let elementData;
+				switch (action) {
+					case 'getBudgetMonth':
+						elementData = await handleGetBudgetMonth(context, itemIndex);
+						returnData.push(elementData);
+						break;
+					case 'getTransactions':
+						returnData.push(...(await handleGetTransactions(context, itemIndex)));
+						break;
+					case 'importTransactions':
+						elementData = await handleBudgetImport(context, itemIndex);
+						returnData.push(elementData);
+						break;
+					case 'setBudgetAmount':
+						elementData = await handleSetBudgetAmount(context, itemIndex);
+						returnData.push(elementData);
+						break;
+				}
+			} catch (error) {
+				if (context.continueOnFail()) {
+					const executionData = context.helpers.constructExecutionMetaData(
+						context.helpers.returnJsonArray({ error: error.message }),
+						{ itemData: { item: itemIndex } },
+					);
+					returnData.push(...executionData);
+					continue;
+				}
+				throw error;
 			}
-		} catch (error) {
-			if (context.continueOnFail()) {
-				const executionData = context.helpers.constructExecutionMetaData(
-					context.helpers.returnJsonArray({ error: error.message }),
-					{ itemData: { item: itemIndex } },
-				);
-				returnData.push(...executionData);
-				continue;
-			}
-			await shutdown();
-			throw error;
 		}
-	}
 
-	await shutdown();
-	return [context.helpers.returnJsonArray(returnData)];
+		return [context.helpers.returnJsonArray(returnData)];
+	} finally {
+		await shutdown();
+	}
 }
 
 async function handleGetTransactions(
