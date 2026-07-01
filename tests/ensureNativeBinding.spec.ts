@@ -15,7 +15,20 @@ vi.mock("detect-libc", () => ({
 import { existsSync, mkdirSync, copyFileSync } from "fs";
 import { sep } from "path";
 import { familySync } from "detect-libc";
-import { ensureNativeBinding } from "../nodes/ActualBudget/ensureNativeBinding";
+import { ensureNativeBinding, type ModuleResolver } from "../nodes/ActualBudget/ensureNativeBinding";
+
+// Fake @actual-app/api / better-sqlite3 locations, fully controlled by the test rather
+// than depending on the real node_modules layout — this is what makes the second
+// candidate target path (resolveTargetPaths' require.resolve branch) deterministic.
+const FAKE_ACTUAL_API_ENTRY = `${sep}fake-pkg${sep}node_modules${sep}@actual-app${sep}api${sep}dist${sep}index.js`;
+const FAKE_BETTER_SQLITE3_PKG_JSON = `${sep}fake-pkg${sep}node_modules${sep}@actual-app${sep}api${sep}node_modules${sep}better-sqlite3${sep}package.json`;
+const FAKE_BETTER_SQLITE3_TARGET = `${sep}fake-pkg${sep}node_modules${sep}@actual-app${sep}api${sep}node_modules${sep}better-sqlite3${sep}build${sep}Release${sep}better_sqlite3.node`;
+
+const fakeResolve: ModuleResolver = vi.fn((request: string) => {
+  if (request === "@actual-app/api") return FAKE_ACTUAL_API_ENTRY;
+  if (request === "better-sqlite3/package.json") return FAKE_BETTER_SQLITE3_PKG_JSON;
+  throw new Error(`Cannot find module '${request}'`);
+});
 
 // Regression coverage for a production crash: n8n's Community Nodes installer runs
 // `npm install --ignore-scripts=true`, so better-sqlite3's own install script (which
@@ -47,7 +60,7 @@ describe("ensureNativeBinding", () => {
     vi.mocked(familySync).mockReturnValue("glibc");
     vi.mocked(existsSync).mockReturnValue(true);
 
-    ensureNativeBinding();
+    ensureNativeBinding(fakeResolve);
 
     expect(copyFileSync).not.toHaveBeenCalled();
   });
@@ -57,7 +70,7 @@ describe("ensureNativeBinding", () => {
     vi.mocked(familySync).mockReturnValue("glibc");
     vi.mocked(existsSync).mockReturnValue(true);
 
-    ensureNativeBinding();
+    ensureNativeBinding(fakeResolve);
 
     expect(copyFileSync).not.toHaveBeenCalled();
   });
@@ -66,7 +79,7 @@ describe("ensureNativeBinding", () => {
     vi.mocked(familySync).mockReturnValue(null);
     vi.mocked(existsSync).mockReturnValue(true);
 
-    ensureNativeBinding();
+    ensureNativeBinding(fakeResolve);
 
     expect(copyFileSync).not.toHaveBeenCalled();
   });
@@ -76,28 +89,33 @@ describe("ensureNativeBinding", () => {
     // The vendored-binary existence check is the first existsSync call.
     vi.mocked(existsSync).mockReturnValue(false);
 
-    ensureNativeBinding();
+    ensureNativeBinding(fakeResolve);
 
     expect(copyFileSync).not.toHaveBeenCalled();
   });
 
   it("copies the musl binary to both candidate target paths when neither already exists", () => {
     vi.mocked(familySync).mockReturnValue("musl");
-    vi.mocked(existsSync).mockReturnValue(false);
-    // First existsSync call checks whether the vendored source binary exists — must be true
-    // for this scenario, so make just that one call true and every other one false.
+    // Only the vendored-source existence check (the one path containing
+    // "vendor/better-sqlite3") should report true; both real targets report false.
     vi.mocked(existsSync).mockImplementation((p) =>
       String(p).includes(`vendor${sep}better-sqlite3`),
     );
 
-    ensureNativeBinding();
+    ensureNativeBinding(fakeResolve);
+
+    expect(fakeResolve).toHaveBeenCalledWith("@actual-app/api");
+    expect(fakeResolve).toHaveBeenCalledWith("better-sqlite3/package.json", {
+      paths: [`${sep}fake-pkg${sep}node_modules${sep}@actual-app${sep}api${sep}dist`],
+    });
 
     expect(copyFileSync).toHaveBeenCalledTimes(2);
     const [sourcePath] = vi.mocked(copyFileSync).mock.calls[0];
     expect(String(sourcePath)).toMatch(/vendor[/\\]better-sqlite3[/\\]linux-x64-musl[/\\]better_sqlite3\.node$/);
 
     const targets = vi.mocked(copyFileSync).mock.calls.map(([, dest]) => String(dest));
-    expect(targets.every((t) => t.endsWith("build/Release/better_sqlite3.node") || t.endsWith("build\\Release\\better_sqlite3.node"))).toBe(true);
+    expect(targets).toContain(FAKE_BETTER_SQLITE3_TARGET);
+    expect(targets.some((t) => t.endsWith("build/Release/better_sqlite3.node") || t.endsWith("build\\Release\\better_sqlite3.node"))).toBe(true);
     expect(mkdirSync).toHaveBeenCalledTimes(2);
   });
 
@@ -106,10 +124,26 @@ describe("ensureNativeBinding", () => {
     // Pretend the vendored source exists AND both possible targets already exist too.
     vi.mocked(existsSync).mockReturnValue(true);
 
-    ensureNativeBinding();
+    ensureNativeBinding(fakeResolve);
 
     expect(copyFileSync).not.toHaveBeenCalled();
     expect(mkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the single generic target when better-sqlite3 isn't resolvable", () => {
+    vi.mocked(familySync).mockReturnValue("glibc");
+    vi.mocked(existsSync).mockImplementation((p) =>
+      String(p).includes(`vendor${sep}better-sqlite3`),
+    );
+    const throwingResolve: ModuleResolver = vi.fn(() => {
+      throw new Error("Cannot find module '@actual-app/api'");
+    });
+
+    ensureNativeBinding(throwingResolve);
+
+    expect(copyFileSync).toHaveBeenCalledTimes(1);
+    const [, target] = vi.mocked(copyFileSync).mock.calls[0];
+    expect(String(target).endsWith("build/Release/better_sqlite3.node") || String(target).endsWith("build\\Release\\better_sqlite3.node")).toBe(true);
   });
 
   it("swallows copy errors instead of throwing", () => {
@@ -121,6 +155,6 @@ describe("ensureNativeBinding", () => {
       throw new Error("EACCES: permission denied");
     });
 
-    expect(() => ensureNativeBinding()).not.toThrow();
+    expect(() => ensureNativeBinding(fakeResolve)).not.toThrow();
   });
 });

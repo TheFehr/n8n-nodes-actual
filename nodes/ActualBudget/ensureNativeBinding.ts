@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, copyFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { familySync, GLIBC, MUSL } from 'detect-libc';
 
+export type ModuleResolver = (request: string, options?: { paths?: string[] }) => string;
+
 // n8n's Community Nodes installer runs `npm install --ignore-scripts=true`, so
 // better-sqlite3's own install script (which fetches/builds its native binary) never
 // runs. Without it, better-sqlite3 has no compiled better_sqlite3.node anywhere and
@@ -11,11 +13,14 @@ import { familySync, GLIBC, MUSL } from 'detect-libc';
 // wherever the `bindings` package (used by better-sqlite3) will look, before any
 // Actual API call that would trigger loading the native module. This is plain runtime
 // code, not an install script, so --ignore-scripts has no effect on it.
-export function ensureNativeBinding(): void {
+//
+// `resolve` defaults to Node's own require.resolve and is only overridable so tests can
+// exercise the target-path logic without depending on the real node_modules layout.
+export function ensureNativeBinding(resolve: ModuleResolver = require.resolve): void {
 	const vendored = resolveVendoredBinding();
 	if (!vendored) return;
 
-	for (const target of resolveTargetPaths()) {
+	for (const target of resolveTargetPaths(resolve)) {
 		try {
 			if (existsSync(target)) continue;
 			mkdirSync(dirname(target), { recursive: true });
@@ -40,7 +45,7 @@ function resolveVendoredBinding(): string | undefined {
 	return existsSync(candidate) ? candidate : undefined;
 }
 
-function resolveTargetPaths(): string[] {
+function resolveTargetPaths(resolve: ModuleResolver): string[] {
 	const targets: string[] = [];
 
 	// Observed in production: n8n's shallow, hoisted community-node install leads the
@@ -56,9 +61,9 @@ function resolveTargetPaths(): string[] {
 	try {
 		// @actual-app/api's package.json restricts "exports" to its main entry, so resolve
 		// that (not "@actual-app/api/package.json") to get a directory inside its tree.
-		const actualApiEntryDir = dirname(require.resolve('@actual-app/api'));
+		const actualApiEntryDir = dirname(resolve('@actual-app/api'));
 		const betterSqlite3Dir = dirname(
-			require.resolve('better-sqlite3/package.json', { paths: [actualApiEntryDir] }),
+			resolve('better-sqlite3/package.json', { paths: [actualApiEntryDir] }),
 		);
 		targets.push(join(betterSqlite3Dir, 'build', 'Release', 'better_sqlite3.node'));
 	} catch {

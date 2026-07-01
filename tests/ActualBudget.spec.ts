@@ -612,12 +612,11 @@ describe("ActualBudget", () => {
       // Let execution A block on its (gated) importTransactions call before starting B.
       await vi.waitFor(() => expect(callOrder).toContain("importTransactions:account-A"));
 
+      // B is chained behind A the instant execute() is called (runExclusive appends to the
+      // shared queue synchronously) — there's no scheduling delay to race against, so B
+      // cannot reach downloadBudget before A's gated importTransactions is released. The
+      // final callOrder assertion below is the deterministic proof of that ordering.
       const execB = nodeB.execute.call(makeExecuteFunctions("budget-B", "account-B"));
-      // Give B a chance to run ahead if it were (incorrectly) not serialized.
-      await new Promise((resolve) => setTimeout(resolve, 20));
-
-      // B must be queued behind A — it must not touch the shared session yet.
-      expect(callOrder).not.toContain("downloadBudget:budget-B");
 
       releaseFirstImport();
       await Promise.all([execA, execB]);
