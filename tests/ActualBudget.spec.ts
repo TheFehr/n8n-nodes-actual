@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ActualBudget } from "../nodes/ActualBudget/ActualBudget.node";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 
@@ -133,6 +133,23 @@ describe("ActualBudget", () => {
     await node.execute.call(executeFunctions);
 
     expect(actualApi.shutdown).toHaveBeenCalled();
+  });
+
+  it("should call shutdown even when downloadBudget throws before any items are processed", async () => {
+    vi.mocked(actualApi.downloadBudget).mockRejectedValueOnce(new Error("network error"));
+    executeFunctions.continueOnFail.mockReturnValue(false);
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "test-account-id";
+      if (name === "transactions") return [];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow("network error");
+
+    expect(actualApi.shutdown).toHaveBeenCalled();
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
   });
 
   it("should call shutdown before re-throwing on error (continueOnFail=false)", async () => {
@@ -519,6 +536,102 @@ describe("ActualBudget", () => {
 
       expect(result).toBeDefined();
       expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+  });
+
+  describe("concurrent executions", () => {
+    // Regression test for a production crash: @actual-app/api keeps its session
+    // (DB connection, sync clock) in a module-level singleton. Before the fix, a second
+    // execute() call could run init()/downloadBudget() while a first call was still
+    // mid-operation, and the first call's shutdown() could tear down state the second
+    // was relying on. Executions must now be fully serialized.
+    afterEach(() => {
+      // These tests replace implementations directly (mockImplementation), which
+      // vi.clearAllMocks() in the outer beforeEach does not undo — restore the
+      // module's default mocks so later tests aren't affected.
+      vi.mocked(actualApi.init).mockResolvedValue(undefined);
+      vi.mocked(actualApi.downloadBudget).mockResolvedValue(undefined);
+      vi.mocked(actualApi.importTransactions).mockResolvedValue({
+        added: ["tx-001"],
+        updated: [],
+        updatedPreview: [],
+        errors: [],
+      } as unknown as IDataObject);
+      vi.mocked(actualApi.shutdown).mockResolvedValue(undefined);
+    });
+
+    const makeExecuteFunctions = (budgetId: string, accountId: string) =>
+      ({
+        getInputData: () => [{ json: {} }],
+        getNodeParameter: (name: string) => {
+          if (name === "operation") return "importTransactions";
+          if (name === "budgetId") return budgetId;
+          if (name === "accountId") return accountId;
+          if (name === "transactions") return [{ date: "2024-01-15", amount: -100 }];
+          return undefined;
+        },
+        getCredentials: async () => ({ url: "http://localhost:5006", password: "test-password" }),
+        continueOnFail: () => false,
+        helpers: {
+          returnJsonArray: (data: unknown) =>
+            Array.isArray(data)
+              ? data.map((d) => ({ json: d as IDataObject }))
+              : [{ json: data as IDataObject }],
+          constructExecutionMetaData: (data: unknown) => data,
+        },
+      }) as unknown as IExecuteFunctions;
+
+    it("should not start a second execution's init/downloadBudget until the first has fully shut down", async () => {
+      const callOrder: string[] = [];
+      let releaseFirstImport: () => void = () => {};
+      const firstImportGate = new Promise<void>((resolve) => {
+        releaseFirstImport = resolve;
+      });
+
+      vi.mocked(actualApi.init).mockImplementation(async () => {
+        callOrder.push("init");
+      });
+      vi.mocked(actualApi.downloadBudget).mockImplementation(async (id: string) => {
+        callOrder.push(`downloadBudget:${id}`);
+      });
+      vi.mocked(actualApi.importTransactions).mockImplementation(async (accountId: string) => {
+        callOrder.push(`importTransactions:${accountId}`);
+        if (accountId === "account-A") {
+          await firstImportGate;
+        }
+        return { added: [], updated: [], updatedPreview: [], errors: [] };
+      });
+      vi.mocked(actualApi.shutdown).mockImplementation(async () => {
+        callOrder.push("shutdown");
+      });
+
+      const nodeA = new ActualBudget();
+      const nodeB = new ActualBudget();
+
+      const execA = nodeA.execute.call(makeExecuteFunctions("budget-A", "account-A"));
+      // Let execution A block on its (gated) importTransactions call before starting B.
+      await vi.waitFor(() => expect(callOrder).toContain("importTransactions:account-A"));
+
+      const execB = nodeB.execute.call(makeExecuteFunctions("budget-B", "account-B"));
+      // Give B a chance to run ahead if it were (incorrectly) not serialized.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // B must be queued behind A — it must not touch the shared session yet.
+      expect(callOrder).not.toContain("downloadBudget:budget-B");
+
+      releaseFirstImport();
+      await Promise.all([execA, execB]);
+
+      expect(callOrder).toEqual([
+        "init",
+        "downloadBudget:budget-A",
+        "importTransactions:account-A",
+        "shutdown",
+        "init",
+        "downloadBudget:budget-B",
+        "importTransactions:account-B",
+        "shutdown",
+      ]);
     });
   });
 });

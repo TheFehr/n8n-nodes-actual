@@ -22,8 +22,10 @@ services:
     volumes:
       - .:/home/node/custom-nodes:ro
       - n8n_data:/home/node/.n8n
-    # Copy the compiled dist into the pre-installed package dir (avoids mounting
-    # host node_modules which have glibc binaries incompatible with Alpine).
+    # Copy the compiled dist into the package dir installed at image build time via
+    # n8n's real --ignore-scripts=true community-node install flow (see
+    # Dockerfile.test-n8n) — avoids mounting host node_modules, which have glibc
+    # binaries incompatible with Alpine and wouldn't reflect the ignore-scripts install.
     entrypoint: /bin/sh -c "
       cp -r /home/node/custom-nodes/dist /n8n-nodes-actual/dist &&
       mkdir -p /home/node/.n8n/nodes/node_modules &&

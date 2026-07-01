@@ -18,6 +18,8 @@ import {
 	shutdown,
 } from '@actual-app/api';
 
+import { ensureNativeBinding } from './ensureNativeBinding';
+
 interface ActualTransaction {
 	date: string;
 	amount: number;
@@ -304,6 +306,7 @@ async function handleSetBudgetAmount(
 }
 
 async function initializeActualBudget(auth: Credentials): Promise<void> {
+	ensureNativeBinding();
 	await init({
 		serverURL: auth.url,
 		password: auth.password,
