@@ -59,6 +59,50 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     expect((output.added as unknown[]).length).toBeGreaterThan(0);
   }, 30000);
 
+  it("should handle concurrent executions without crashing on the shared session", async () => {
+    // Regression test: @actual-app/api keeps its session (DB connection, sync clock) in a
+    // module-level singleton. Two node executions running at once in the same process used to
+    // let one's shutdown() tear down state the other was still mid-operation on, crashing deep
+    // in the SDK's sync internals. Fire two executions concurrently against the real API and
+    // confirm both complete cleanly instead of racing.
+    const makeExecuteFunctions = (notes: string, amount: number) =>
+      ({
+        getInputData: () => [{ json: {} }],
+        getNodeParameter: (name: string) => {
+          if (name === "operation") return "importTransactions";
+          if (name === "budgetId") return budgetId;
+          if (name === "accountId") return accountId;
+          if (name === "transactions")
+            return JSON.stringify([{ date: "2024-03-02", amount, notes }]);
+          return undefined;
+        },
+        getCredentials: async () => ({ url: serverURL, password }),
+        continueOnFail: () => false,
+        helpers: {
+          returnJsonArray: (data: unknown) =>
+            Array.isArray(data)
+              ? data.map((d) => ({ json: d as IDataObject }))
+              : [{ json: data as IDataObject }],
+          constructExecutionMetaData: (data: unknown) => data,
+        },
+      }) as unknown as IExecuteFunctions;
+
+    const nodeA = new ActualBudget();
+    const nodeB = new ActualBudget();
+
+    const [resultA, resultB] = await Promise.all([
+      nodeA.execute.call(makeExecuteFunctions("Concurrent A", -100)),
+      nodeB.execute.call(makeExecuteFunctions("Concurrent B", -200)),
+    ]);
+
+    const outputA = resultA[0][0].json as Record<string, unknown>;
+    const outputB = resultB[0][0].json as Record<string, unknown>;
+    expect((outputA.errors as unknown[]).length).toBe(0);
+    expect((outputB.errors as unknown[]).length).toBe(0);
+    expect((outputA.added as unknown[]).length).toBeGreaterThan(0);
+    expect((outputB.added as unknown[]).length).toBeGreaterThan(0);
+  }, 30000);
+
   it("should reflect imported transactions in the budget", async () => {
     // The node calls shutdown() at the end of execute(), so re-open before verifying
     await api.init({ serverURL, password, dataDir });

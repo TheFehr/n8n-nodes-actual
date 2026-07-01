@@ -4,7 +4,25 @@ FROM ${N8N_IMAGE}
 
 USER root
 WORKDIR /n8n-nodes-actual
+
+# Faithfully replicate n8n's own community-node installer
+# (packages/cli/src/modules/community-packages/community-packages.service.ts): strip
+# dev/peer/optional deps, then npm install with --ignore-scripts=true so any native-module
+# postinstall step (e.g. better-sqlite3's) never runs — exactly like a real GUI-driven
+# install. A plain script-enabled `npm install` here would silently mask exactly the kind
+# of native-binding bug this test suite needs to catch.
 COPY package.json .
-RUN npm install --omit=dev --legacy-peer-deps
+RUN node -e " \
+	const fs = require('fs'); \
+	const { devDependencies, peerDependencies, optionalDependencies, ...packageJson } = JSON.parse(fs.readFileSync('package.json', 'utf-8')); \
+	fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2)); \
+	"
+RUN npm install --audit=false --fund=false --bin-links=false --install-strategy=shallow --ignore-scripts=true --package-lock=false
+
+# vendor/ ships prebuilt native bindings ensureNativeBinding() places at runtime; it
+# rarely changes so it's baked in at build time (dist/ is refreshed per test run instead,
+# via the compose entrypoint mounting the freshly built host dist/).
+COPY vendor ./vendor
+
 RUN chown -R 1000:1000 /n8n-nodes-actual
 USER node

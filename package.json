@@ -30,7 +30,8 @@
     "prepublishOnly": "n8n-node prerelease"
   },
   "files": [
-    "dist"
+    "dist",
+    "vendor"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
@@ -56,6 +57,7 @@
     "n8n-workflow": "^2.16.0"
   },
   "dependencies": {
-    "@actual-app/api": "26.6.0"
+    "@actual-app/api": "26.6.0",
+    "detect-libc": "^2.1.2"
   }
 }
