@@ -57,7 +57,7 @@
     "n8n-workflow": "^2.16.0"
   },
   "dependencies": {
-    "@actual-app/api": "26.6.0",
+    "@actual-app/api": "26.7.0",
     "detect-libc": "^2.1.2"
   }
 }
