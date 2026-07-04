@@ -21,9 +21,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Needed for git describe and commit counting
+          # persist-credentials stays true (default) so the later raw
+          # `git push` in the Publish step authenticates as the app.
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
