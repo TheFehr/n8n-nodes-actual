@@ -29,7 +29,7 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           permission-contents: write
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0 # Needed for git describe and commit counting
           persist-credentials: false
@@ -129,8 +129,8 @@ jobs:
           git commit -m "Release $NEW_VERSION [skip ci]"
           git tag $NEW_VERSION
 
-          # Push commit and tag, authenticating only for this push
-          git push "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git" main --tags
+          # Push commit and tag atomically, authenticating only for this push
+          git push --atomic "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git" main --tags
 
           # Publish to NPM directly with provenance enabled
           # We use --ignore-scripts to bypass n8n-node's prerelease check which 
