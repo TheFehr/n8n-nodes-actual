@@ -32,9 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Needed for git describe and commit counting
-          # persist-credentials stays true (default) so the later raw
-          # `git push` in the Publish step authenticates as the app.
-          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -108,7 +106,7 @@ jobs:
       - name: Publish to NPM
         if: steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_TOKEN: ${{ steps.generate_token.outputs.token }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         run: |
@@ -131,8 +129,8 @@ jobs:
           git commit -m "Release $NEW_VERSION [skip ci]"
           git tag $NEW_VERSION
 
-          # Push commit and tag
-          git push origin main --tags
+          # Push commit and tag, authenticating only for this push
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git" main --tags
 
           # Publish to NPM directly with provenance enabled
           # We use --ignore-scripts to bypass n8n-node's prerelease check which 
