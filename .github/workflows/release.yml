@@ -131,11 +131,12 @@ jobs:
           steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          RELEASE_BUMP: ${{ steps.check_version.outputs.RELEASE_BUMP }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-          NEW_VERSION=$(npm version ${{ steps.check_version.outputs.RELEASE_BUMP }} --no-git-tag-version --allow-same-version)
+          NEW_VERSION=$(npm version "$RELEASE_BUMP" --no-git-tag-version --allow-same-version)
           NEW_VERSION=${NEW_VERSION#v}
           echo "Preparing release $NEW_VERSION"
 
