@@ -28,6 +28,7 @@ jobs:
           client-id: ${{ secrets.CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           permission-contents: write
+          permission-pull-requests: write
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -51,7 +52,23 @@ jobs:
 
       - name: Calculate Version and Check for Changes
         id: check_version
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
+          # If this push IS a just-merged release PR (see "Open Release PR"
+          # below), there's nothing to calculate: skip straight to tag+publish.
+          # Detected via the PR's "release" label rather than the commit
+          # message, so a manually-edited merge title can't break detection.
+          HAS_RELEASE_LABEL=$(gh api "repos/${{ github.repository }}/commits/$(git rev-parse HEAD)/pulls" \
+            --jq '[.[] | select(.labels[].name == "release")] | length > 0')
+          if [ "$HAS_RELEASE_LABEL" = "true" ]; then
+            echo "This push is a just-merged release PR."
+            echo "IS_RELEASE_COMMIT=true" >> $GITHUB_OUTPUT
+            echo "SKIP_RELEASE=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "IS_RELEASE_COMMIT=false" >> $GITHUB_OUTPUT
+
           # Read versions from package.json
           # Strip any prefixes like ^ or ~ from the version string
           API_VERSION=$(jq -r '.dependencies["@actual-app/api"]' package.json | sed 's/^[^0-9]*//')
@@ -103,36 +120,62 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish to NPM
-        if: steps.check_version.outputs.SKIP_RELEASE != 'true'
+      # Required status checks block a direct push to main, and the app token
+      # has no bypass rights - so land the version bump through a real PR
+      # instead. Opening/merging it as the app (not the default GITHUB_TOKEN)
+      # means ci.yml actually triggers on it, so the merge is a normal,
+      # check-satisfying merge rather than something needing a bypass.
+      - name: Open Release PR
+        if: >-
+          steps.check_version.outputs.IS_RELEASE_COMMIT != 'true' &&
+          steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
-          APP_TOKEN: ${{ steps.generate_token.outputs.token }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
-          # Configure git
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-          # Bump version in package.json and capture the new version
-          # npm version outputs the version string (e.g., v26.5.1)
           NEW_VERSION=$(npm version ${{ steps.check_version.outputs.RELEASE_BUMP }} --no-git-tag-version --allow-same-version)
-          # Strip the leading 'v'
           NEW_VERSION=${NEW_VERSION#v}
-          echo "Final Version: $NEW_VERSION"
+          echo "Preparing release $NEW_VERSION"
 
-          # Update changelog
           npx auto-changelog -p
 
-          # Commit and Tag
+          BRANCH="release/$NEW_VERSION"
+          git checkout -b "$BRANCH"
           git add package.json package-lock.json CHANGELOG.md
-          git commit -m "Release $NEW_VERSION [skip ci]"
-          git tag $NEW_VERSION
+          git commit -m "Release $NEW_VERSION"
 
-          # Push commit and tag atomically, authenticating only for this push
-          git push --atomic "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git" main --tags
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push "$REMOTE" "$BRANCH"
+
+          gh label create release --color 0e8a16 --description "Automated release PR" 2>/dev/null || true
+
+          gh pr create --title "Release $NEW_VERSION" \
+            --body "Automated release PR. Merging tags and publishes $NEW_VERSION to npm." \
+            --base main --head "$BRANCH" --label release
+          gh pr merge --auto --squash --subject "Release $NEW_VERSION" "$BRANCH"
+
+      # Runs on the follow-up push once the PR above auto-merges. Tags are
+      # unprotected refs, so this push needs no bypass either.
+      - name: Tag and Publish
+        if: steps.check_version.outputs.IS_RELEASE_COMMIT == 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: |
+          NEW_VERSION=$(jq -r .version package.json)
+          echo "Tagging and publishing $NEW_VERSION"
+
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag "$NEW_VERSION"
+
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push "$REMOTE" "$NEW_VERSION"
 
           # Publish to NPM directly with provenance enabled
-          # We use --ignore-scripts to bypass n8n-node's prerelease check which 
+          # We use --ignore-scripts to bypass n8n-node's prerelease check which
           # would otherwise force us to use 'npm run release'
           npm publish --provenance --access public --ignore-scripts
