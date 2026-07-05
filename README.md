@@ -11,6 +11,7 @@ Actual is a local-first personal finance tool. It is 100% free and open-source, 
 [Credentials](#credentials)
 [Compatibility](#compatibility)  
 [Resources](#resources)  
+[License](#license)
 
 ## Installation
 
@@ -38,5 +39,13 @@ This was developed for version 2.28.6 of n8n and version 26.7.0 of Actual.
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
 * [Actual Budget Website](https://actualbudget.org/)
 
+## License
 
+MIT, see [LICENSE.md](LICENSE.md).
+
+Community node packages can't declare native-addon or shared-library runtime
+dependencies, so a few third-party packages (`@actual-app/api`, `better-sqlite3`,
+`detect-libc`, and their own dependencies) are bundled directly into this package's
+build output rather than installed normally — see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for their license terms.
 
