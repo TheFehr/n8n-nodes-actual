@@ -4,6 +4,8 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
+	NodeApiError,
 	NodeConnectionTypes,
 	NodeOperationError,
 } from 'n8n-workflow';
@@ -17,8 +19,6 @@ import {
 	setBudgetAmount,
 	shutdown,
 } from '@actual-app/api';
-
-import { ensureNativeBinding } from './ensureNativeBinding';
 
 interface ActualTransaction {
 	date: string;
@@ -210,11 +210,15 @@ export class ActualBudget implements INodeType {
 		// @actual-app/api keeps its session (DB connection, sync clock) in a module-level
 		// singleton, so two executions running at once in this process would tear down or
 		// reinitialize each other's state mid-operation. Serialize executions to avoid that.
-		return runExclusive(() => runActualBudget(this));
+		const continueOnFail = this.continueOnFail();
+		return runExclusive(() => runActualBudget(this, continueOnFail));
 	}
 }
 
-async function runActualBudget(context: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+async function runActualBudget(
+	context: IExecuteFunctions,
+	continueOnFail: boolean,
+): Promise<INodeExecutionData[][]> {
 	const items = context.getInputData();
 	const returnData = [];
 
@@ -248,7 +252,7 @@ async function runActualBudget(context: IExecuteFunctions): Promise<INodeExecuti
 						break;
 				}
 			} catch (error) {
-				if (context.continueOnFail()) {
+				if (continueOnFail) {
 					const executionData = context.helpers.constructExecutionMetaData(
 						context.helpers.returnJsonArray({ error: error.message }),
 						{ itemData: { item: itemIndex } },
@@ -256,7 +260,13 @@ async function runActualBudget(context: IExecuteFunctions): Promise<INodeExecuti
 					returnData.push(...executionData);
 					continue;
 				}
-				throw error;
+				// Validation failures from handleGetTransactions/handleBudgetImport are already
+				// NodeOperationError with a user-facing message; only wrap other (API/unknown)
+				// errors, so validation errors aren't reported to the user as API failures.
+				if (error instanceof NodeOperationError) {
+					throw error as NodeOperationError;
+				}
+				throw new NodeApiError(context.getNode(), error as JsonObject);
 			}
 		}
 
@@ -306,7 +316,6 @@ async function handleSetBudgetAmount(
 }
 
 async function initializeActualBudget(auth: Credentials): Promise<void> {
-	ensureNativeBinding();
 	await init({
 		serverURL: auth.url,
 		password: auth.password,
