@@ -172,7 +172,7 @@ jobs:
           # scheduled run until then re-detects IS_RELEASE_COMMIT=true and lands here
           # again. Only tag+publish once; treat an already-existing tag as "already
           # released" rather than an error.
-          if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+          if git rev-parse -q --verify "refs/tags/$NEW_VERSION" >/dev/null 2>&1; then
             echo "Tag $NEW_VERSION already exists - already released, nothing to do."
             exit 0
           fi
