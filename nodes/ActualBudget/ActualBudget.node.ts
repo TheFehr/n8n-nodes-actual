@@ -260,6 +260,12 @@ async function runActualBudget(
 					returnData.push(...executionData);
 					continue;
 				}
+				// Validation failures from handleGetTransactions/handleBudgetImport are already
+				// NodeOperationError with a user-facing message; only wrap other (API/unknown)
+				// errors, so validation errors aren't reported to the user as API failures.
+				if (error instanceof NodeOperationError) {
+					throw error as NodeOperationError;
+				}
 				throw new NodeApiError(context.getNode(), error as JsonObject);
 			}
 		}
