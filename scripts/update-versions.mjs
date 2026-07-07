@@ -20,7 +20,7 @@ async function updatePackageJson(n8nWorkflowVersion, actualVersion, dryRun) {
   const newN8nPeer = `^${n8nWorkflowVersion}`;
   const newActual = actualVersion;
   const oldN8nPeer = pkg.peerDependencies?.["n8n-workflow"];
-  const oldActual = pkg.dependencies?.["@actual-app/api"];
+  const oldActual = pkg.devDependencies?.["@actual-app/api"];
 
   let updated = false;
 
@@ -31,8 +31,8 @@ async function updatePackageJson(n8nWorkflowVersion, actualVersion, dryRun) {
   }
 
   if (oldActual !== newActual) {
-    console.log(`package.json: dependencies.@actual-app/api (${oldActual} -> ${newActual})`);
-    if (!dryRun) pkg.dependencies["@actual-app/api"] = newActual;
+    console.log(`package.json: devDependencies.@actual-app/api (${oldActual} -> ${newActual})`);
+    if (!dryRun) pkg.devDependencies["@actual-app/api"] = newActual;
     updated = true;
   }
 
