@@ -17,16 +17,20 @@ async function updatePackageJson(n8nWorkflowVersion, actualVersion, dryRun) {
   const path = join(process.cwd(), "package.json");
   const pkg = JSON.parse(readFileSync(path, "utf8"));
 
-  const newN8nPeer = `^${n8nWorkflowVersion}`;
   const newActual = actualVersion;
-  const oldN8nPeer = pkg.peerDependencies?.["n8n-workflow"];
+  const oldN8nWorkflow = pkg.n8nWorkflowVersion;
   const oldActual = pkg.devDependencies?.["@actual-app/api"];
 
   let updated = false;
 
-  if (oldN8nPeer !== newN8nPeer) {
-    console.log(`package.json: peerDependencies.n8n-workflow (${oldN8nPeer} -> ${newN8nPeer})`);
-    if (!dryRun) pkg.peerDependencies["n8n-workflow"] = newN8nPeer;
+  // peerDependencies.n8n-workflow must stay "*" - @n8n/eslint-plugin-community-nodes'
+  // valid-peer-dependencies rule rejects a pinned version, since community nodes must
+  // accept whatever n8n-workflow the host n8n installation provides. Track the latest
+  // version we've synced against separately so nightly.yml can still detect
+  // compatibility-relevant bumps.
+  if (oldN8nWorkflow !== n8nWorkflowVersion) {
+    console.log(`package.json: n8nWorkflowVersion (${oldN8nWorkflow} -> ${n8nWorkflowVersion})`);
+    if (!dryRun) pkg.n8nWorkflowVersion = n8nWorkflowVersion;
     updated = true;
   }
 
