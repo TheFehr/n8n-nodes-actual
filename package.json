@@ -50,7 +50,7 @@
     "@types/node": "^25.5.2",
     "detect-libc": "^2.1.2",
     "esbuild": "^0.28.1",
-    "eslint": "9.39.4",
+    "eslint": "9.39.5",
     "prettier": "3.9.5",
     "release-it": "^20.0.0",
     "typescript": "5.9.3",
