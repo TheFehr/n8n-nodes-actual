@@ -9,6 +9,16 @@
       "automerge": true,
       "automergeType": "pr",
       "commitMessageSuffix": "[no-release]"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "commitMessageSuffix": "[no-release]"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "automergeType": "pr",
+      "commitMessageSuffix": "[no-release]"
     }
   ]
 }
