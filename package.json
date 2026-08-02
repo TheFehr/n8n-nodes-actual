@@ -45,7 +45,7 @@
     ]
   },
   "devDependencies": {
-    "@actual-app/api": "26.7.0",
+    "@actual-app/api": "26.8.0",
     "@n8n/node-cli": "*",
     "@types/node": "^25.5.2",
     "detect-libc": "^2.1.2",
