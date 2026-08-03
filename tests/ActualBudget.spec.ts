@@ -76,6 +76,15 @@ vi.mock("@actual-app/api", () => ({
   deleteTag: vi.fn().mockResolvedValue(undefined),
   getNote: vi.fn().mockResolvedValue({ id: "acc-1", note: "Existing note" }),
   updateNote: vi.fn().mockResolvedValue(undefined),
+  getBudgetMonths: vi.fn().mockResolvedValue(["2024-01", "2024-02", "2024-03"]),
+  getBudgets: vi.fn().mockResolvedValue([{ id: "file-1", name: "My Budget", cloudFileId: "cloud-1" }]),
+  getPreferences: vi.fn().mockResolvedValue({ dateFormat: "MM/dd/yyyy" }),
+  getServerVersion: vi.fn().mockResolvedValue({ version: "25.0.0" }),
+  setBudgetCarryover: vi.fn().mockResolvedValue(undefined),
+  holdBudgetForNextMonth: vi.fn().mockResolvedValue(true),
+  resetBudgetHold: vi.fn().mockResolvedValue(undefined),
+  runBankSync: vi.fn().mockResolvedValue(undefined),
+  sync: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -753,6 +762,152 @@ describe("ActualBudget", () => {
 
       expect(result).toBeDefined();
       expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+  });
+
+  describe("budget mechanics operations", () => {
+    it("should call getBudgetMonths and return each month as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getBudgetMonths";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getBudgetMonths).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(3);
+    });
+
+    it("should call getBudgets and return each budget file as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getBudgets";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getBudgets).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+    });
+
+    it("should call getPreferences", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getPreferences";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getPreferences).toHaveBeenCalled();
+      expect(result[0][0].json).toEqual({ dateFormat: "MM/dd/yyyy" });
+    });
+
+    it("should call getServerVersion", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getServerVersion";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getServerVersion).toHaveBeenCalled();
+      expect(result[0][0].json).toEqual({ version: "25.0.0" });
+    });
+
+    it("should call setBudgetCarryover with month, categoryId, and carryover flag", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetCarryover";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "carryover") return true;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.setBudgetCarryover).toHaveBeenCalledWith("2024-03", "cat-abc", true);
+    });
+
+    it("should call holdBudgetForNextMonth with month and amount", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "holdBudgetForNextMonth";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "amount") return 20000;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.holdBudgetForNextMonth).toHaveBeenCalledWith("2024-03", 20000);
+      expect(result[0][0].json).toEqual({ success: true, month: "2024-03", amount: 20000 });
+    });
+
+    it("should call resetBudgetHold with month", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "resetBudgetHold";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.resetBudgetHold).toHaveBeenCalledWith("2024-03");
+    });
+
+    it("should call sync", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "sync";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.sync).toHaveBeenCalled();
+      expect(result[0][0].json).toEqual({ success: true });
+    });
+
+    it("should call runBankSync with the resolved account ID when provided", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runBankSync";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.runBankSync).toHaveBeenCalledWith({ accountId: "acc-1" });
+    });
+
+    it("should call runBankSync with no args when account is not provided", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runBankSync";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.runBankSync).toHaveBeenCalledWith(undefined);
     });
   });
 
