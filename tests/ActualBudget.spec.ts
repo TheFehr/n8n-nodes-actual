@@ -60,6 +60,15 @@ vi.mock("@actual-app/api", () => ({
   addTransactions: vi.fn().mockResolvedValue("ok"),
   updateTransaction: vi.fn().mockResolvedValue([{ id: "tx-001" }]),
   deleteTransaction: vi.fn().mockResolvedValue([{ id: "tx-001" }]),
+  getRules: vi.fn().mockResolvedValue([{ id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] }]),
+  getPayeeRules: vi.fn().mockResolvedValue([{ id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] }]),
+  createRule: vi.fn().mockResolvedValue({ id: "rule-new", stage: null, conditionsOp: "and", conditions: [], actions: [] }),
+  updateRule: vi.fn().mockResolvedValue({ id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] }),
+  deleteRule: vi.fn().mockResolvedValue(true),
+  getSchedules: vi.fn().mockResolvedValue([{ id: "sched-1", name: "Rent" }]),
+  createSchedule: vi.fn().mockResolvedValue("sched-new"),
+  updateSchedule: vi.fn().mockResolvedValue("sched-1"),
+  deleteSchedule: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -1117,6 +1126,168 @@ describe("ActualBudget", () => {
       await node.execute.call(executeFunctions);
 
       expect(actualApi.mergePayees).toHaveBeenCalledWith("payee-1", ["payee-2", "payee-3"]);
+    });
+  });
+
+  describe("rule resource", () => {
+    it("should call getRules and return each rule as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getRules";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getRules).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+    });
+
+    it("should call getPayeeRules with the resolved payee ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getPayeeRules";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "payeeId") return "payee-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.getPayeeRules).toHaveBeenCalledWith("payee-1");
+    });
+
+    it("should call createRule with the parsed rule JSON", async () => {
+      const rule = { stage: null, conditionsOp: "and", conditions: [], actions: [] };
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createRule";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "rule") return JSON.stringify(rule);
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.createRule).toHaveBeenCalledWith(rule);
+    });
+
+    it("should throw on invalid rule JSON", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createRule";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "rule") return "not json";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/invalid JSON/);
+    });
+
+    it("should call updateRule with the id merged into the parsed rule JSON", async () => {
+      const rule = { stage: null, conditionsOp: "and", conditions: [], actions: [] };
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateRule";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "ruleId") return "rule-1";
+        if (name === "rule") return JSON.stringify(rule);
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateRule).toHaveBeenCalledWith({ id: "rule-1", ...rule });
+    });
+
+    it("should call deleteRule with the rule ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteRule";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "ruleId") return "rule-1";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteRule).toHaveBeenCalledWith("rule-1");
+      expect(result[0][0].json).toEqual({ success: true, id: "rule-1" });
+    });
+  });
+
+  describe("schedule resource", () => {
+    it("should call getSchedules and return each schedule as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getSchedules";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getSchedules).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+    });
+
+    it("should call createSchedule with the resolved account/payee and other fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "Rent";
+        if (name === "accountId") return "acc-1";
+        if (name === "payeeId") return "payee-1";
+        if (name === "amount") return -150000;
+        if (name === "amountOp") return "is";
+        if (name === "date") return '"2024-04-01"';
+        if (name === "posts_transaction") return true;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.createSchedule).toHaveBeenCalledWith({
+        name: "Rent",
+        account: "acc-1",
+        payee: "payee-1",
+        amount: -150000,
+        amountOp: "is",
+        date: "2024-04-01",
+        posts_transaction: true,
+      });
+    });
+
+    it("should call updateSchedule with the resolved schedule ID, fields, and resetNextDate", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "scheduleId") return "sched-1";
+        if (name === "updateFields") return { amount: -160000 };
+        if (name === "resetNextDate") return true;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateSchedule).toHaveBeenCalledWith("sched-1", { amount: -160000 }, true);
+    });
+
+    it("should call deleteSchedule with the schedule ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "scheduleId") return "sched-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteSchedule).toHaveBeenCalledWith("sched-1");
     });
   });
 
