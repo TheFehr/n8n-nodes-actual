@@ -10,27 +10,10 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import {
-	init,
-	downloadBudget,
-	importTransactions,
-	getTransactions,
-	getBudgetMonth,
-	setBudgetAmount,
-	shutdown,
-} from '@actual-app/api';
+import { init, downloadBudget, shutdown } from '@actual-app/api';
 
-interface ActualTransaction {
-	date: string;
-	amount: number;
-	payee?: string;
-	payee_name?: string;
-	imported_payee?: string;
-	category?: string;
-	notes?: string;
-	cleared?: boolean;
-	imported_id?: string;
-}
+import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
+import { budgetOperation, budgetFields, executeBudget } from './actions/budget';
 
 interface Credentials {
 	url: string;
@@ -83,125 +66,27 @@ export class ActualBudget implements INodeType {
 				required: true,
 			},
 			{
-				displayName: 'Operation',
-				name: 'operation',
+				displayName: 'Resource',
+				name: 'resource',
 				type: 'options',
+				noDataExpression: true,
 				options: [
 					{
-						name: 'Get Budget Month',
-						value: 'getBudgetMonth',
-						action: 'Get budget data for a specific month',
+						name: 'Budget',
+						value: 'budget',
 					},
 					{
-						name: 'Get Transactions',
-						value: 'getTransactions',
-						action: 'Get transactions from an account within a date range',
-					},
-					{
-						name: 'Import Transactions',
-						value: 'importTransactions',
-						action: 'Import a list of transactions into your budget',
-					},
-					{
-						name: 'Set Budget Amount',
-						value: 'setBudgetAmount',
-						action: 'Set the budget amount for a category in a specific month',
+						name: 'Transaction',
+						value: 'transaction',
 					},
 				],
-				default: 'importTransactions',
-				required: true,
-				noDataExpression: true,
-			},
-			{
-				displayName: 'Account ID',
-				description: 'The ID of the Account you are working on/with',
-				name: 'accountId',
-				type: 'string',
-				default: '',
-				displayOptions: {
-					show: {
-						operation: ['importTransactions', 'getTransactions'],
-					},
-				},
+				default: 'transaction',
 				required: true,
 			},
-			{
-				displayName: 'Start Date',
-				name: 'startDate',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'Start date in YYYY-MM-DD format (inclusive)',
-				displayOptions: {
-					show: {
-						operation: ['getTransactions'],
-					},
-				},
-			},
-			{
-				displayName: 'End Date',
-				name: 'endDate',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'End date in YYYY-MM-DD format (inclusive)',
-				displayOptions: {
-					show: {
-						operation: ['getTransactions'],
-					},
-				},
-			},
-			{
-				displayName: 'Transactions',
-				name: 'transactions',
-				type: 'json',
-				default: '[]',
-				required: true,
-				displayOptions: {
-					show: {
-						operation: ['importTransactions'],
-					},
-				},
-			},
-			{
-				displayName: 'Month',
-				name: 'month',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'Month in YYYY-MM format',
-				displayOptions: {
-					show: {
-						operation: ['getBudgetMonth', 'setBudgetAmount'],
-					},
-				},
-			},
-			{
-				displayName: 'Category ID',
-				name: 'categoryId',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'The ID of the budget category',
-				displayOptions: {
-					show: {
-						operation: ['setBudgetAmount'],
-					},
-				},
-			},
-			{
-				displayName: 'Amount',
-				name: 'amount',
-				type: 'number',
-				default: 0,
-				required: true,
-				description: 'Budget amount in millicents (e.g. 100000 = $100.00)',
-				displayOptions: {
-					show: {
-						operation: ['setBudgetAmount'],
-					},
-				},
-			},
+			transactionOperation,
+			budgetOperation,
+			...transactionFields,
+			...budgetFields,
 		],
 		usableAsTool: undefined,
 	};
@@ -222,7 +107,8 @@ async function runActualBudget(
 	const items = context.getInputData();
 	const returnData = [];
 
-	const action = context.getNodeParameter('operation', 0) as string;
+	const resource = context.getNodeParameter('resource', 0) as string;
+	const operation = context.getNodeParameter('operation', 0) as string;
 	const auth = (await context.getCredentials('actualBudgetApi', 0)) as Credentials;
 	await initializeActualBudget(auth);
 
@@ -233,23 +119,11 @@ async function runActualBudget(
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
-				let elementData;
-				switch (action) {
-					case 'getBudgetMonth':
-						elementData = await handleGetBudgetMonth(context, itemIndex);
-						returnData.push(elementData);
-						break;
-					case 'getTransactions':
-						returnData.push(...(await handleGetTransactions(context, itemIndex)));
-						break;
-					case 'importTransactions':
-						elementData = await handleBudgetImport(context, itemIndex);
-						returnData.push(elementData);
-						break;
-					case 'setBudgetAmount':
-						elementData = await handleSetBudgetAmount(context, itemIndex);
-						returnData.push(elementData);
-						break;
+				const elementData = await dispatch(context, itemIndex, resource, operation);
+				if (Array.isArray(elementData)) {
+					returnData.push(...elementData);
+				} else {
+					returnData.push(elementData);
 				}
 			} catch (error) {
 				if (continueOnFail) {
@@ -260,9 +134,9 @@ async function runActualBudget(
 					returnData.push(...executionData);
 					continue;
 				}
-				// Validation failures from handleGetTransactions/handleBudgetImport are already
-				// NodeOperationError with a user-facing message; only wrap other (API/unknown)
-				// errors, so validation errors aren't reported to the user as API failures.
+				// Validation failures from the resource handlers are already NodeOperationError
+				// with a user-facing message; only wrap other (API/unknown) errors, so validation
+				// errors aren't reported to the user as API failures.
 				if (error instanceof NodeOperationError) {
 					throw error as NodeOperationError;
 				}
@@ -276,43 +150,20 @@ async function runActualBudget(
 	}
 }
 
-async function handleGetTransactions(
+async function dispatch(
 	context: IExecuteFunctions,
 	itemIndex: number,
-): Promise<IDataObject[]> {
-	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const startDate = context.getNodeParameter('startDate', itemIndex) as string;
-	const endDate = context.getNodeParameter('endDate', itemIndex) as string;
-	const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-	if (!datePattern.test(startDate)) {
-		throw new NodeOperationError(context.getNode(), `"startDate" must be in YYYY-MM-DD format, got "${startDate}"`);
+	resource: string,
+	operation: string,
+): Promise<IDataObject | IDataObject[]> {
+	switch (resource) {
+		case 'transaction':
+			return executeTransaction(context, itemIndex, operation);
+		case 'budget':
+			return executeBudget(context, itemIndex, operation);
+		default:
+			throw new NodeOperationError(context.getNode(), `Unknown resource "${resource}"`);
 	}
-	if (!datePattern.test(endDate)) {
-		throw new NodeOperationError(context.getNode(), `"endDate" must be in YYYY-MM-DD format, got "${endDate}"`);
-	}
-	if (startDate > endDate) {
-		throw new NodeOperationError(context.getNode(), `"startDate" (${startDate}) must be on or before "endDate" (${endDate})`);
-	}
-	return (await getTransactions(accountId, startDate, endDate)) as unknown as IDataObject[];
-}
-
-async function handleGetBudgetMonth(
-	context: IExecuteFunctions,
-	itemIndex: number,
-): Promise<IDataObject> {
-	const month = context.getNodeParameter('month', itemIndex) as string;
-	return (await getBudgetMonth(month)) as unknown as IDataObject;
-}
-
-async function handleSetBudgetAmount(
-	context: IExecuteFunctions,
-	itemIndex: number,
-): Promise<IDataObject> {
-	const month = context.getNodeParameter('month', itemIndex) as string;
-	const categoryId = context.getNodeParameter('categoryId', itemIndex) as string;
-	const amount = context.getNodeParameter('amount', itemIndex) as number;
-	await setBudgetAmount(month, categoryId, amount);
-	return { success: true, month, categoryId, amount };
 }
 
 async function initializeActualBudget(auth: Credentials): Promise<void> {
@@ -320,33 +171,4 @@ async function initializeActualBudget(auth: Credentials): Promise<void> {
 		serverURL: auth.url,
 		password: auth.password,
 	});
-}
-
-async function handleBudgetImport(
-	context: IExecuteFunctions,
-	itemIndex: number,
-): Promise<IDataObject> {
-	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
-	const raw = context.getNodeParameter('transactions', itemIndex);
-	let parsed: unknown;
-	if (typeof raw === 'string') {
-		try {
-			parsed = JSON.parse(raw);
-		} catch {
-			throw new NodeOperationError(context.getNode(), 'Transactions field contains invalid JSON');
-		}
-	} else {
-		parsed = raw;
-	}
-	if (!Array.isArray(parsed)) {
-		throw new NodeOperationError(context.getNode(), `"transactions" must be a JSON array, got ${typeof parsed}`);
-	}
-	for (const item of parsed) {
-		if (typeof item !== 'object' || item === null || !('date' in item) || !('amount' in item)) {
-			throw new NodeOperationError(context.getNode(), 'Each transaction must have "date" and "amount" fields');
-		}
-	}
-	const transactions = parsed as ActualTransaction[];
-
-	return (await importTransactions(accountId, transactions)) as unknown as IDataObject;
 }

@@ -33,6 +33,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
         if (name === "operation") return "importTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return budgetId;
         if (name === "accountId") return accountId;
         if (name === "transactions") return JSON.stringify(transactions);
@@ -70,6 +71,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         getInputData: () => [{ json: {} }],
         getNodeParameter: (name: string) => {
           if (name === "operation") return "importTransactions";
+          if (name === "resource") return "transaction";
           if (name === "budgetId") return budgetId;
           if (name === "accountId") return accountId;
           if (name === "transactions")
@@ -119,6 +121,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
         if (name === "operation") return "getBudgetMonth";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return budgetId;
         if (name === "month") return testMonth;
         return undefined;
@@ -151,6 +154,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
         if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return budgetId;
         if (name === "month") return testMonth;
         if (name === "categoryId") return categoryId;
@@ -189,6 +193,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return budgetId;
         if (name === "accountId") return accountId;
         if (name === "startDate") return "2024-03-01";
