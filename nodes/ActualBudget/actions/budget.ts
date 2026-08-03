@@ -7,6 +7,8 @@ import {
 
 import { getBudgetMonth, setBudgetAmount } from '@actual-app/api';
 
+import { resourceLocatorField } from '../GenericFunctions';
+
 export const budgetOperation: INodeProperties = {
 	displayName: 'Operation',
 	name: 'operation',
@@ -47,37 +49,19 @@ export const budgetFields: INodeProperties[] = [
 			},
 		},
 	},
-	{
+	resourceLocatorField({
 		displayName: 'Category',
 		name: 'categoryId',
-		type: 'resourceLocator',
-		default: { mode: 'list', value: '' },
-		required: true,
 		description: 'The budget category',
+		searchListMethod: 'searchCategories',
+		required: true,
 		displayOptions: {
 			show: {
 				resource: ['budget'],
 				operation: ['setBudgetAmount'],
 			},
 		},
-		modes: [
-			{
-				displayName: 'From List',
-				name: 'list',
-				type: 'list',
-				typeOptions: {
-					searchListMethod: 'searchCategories',
-					searchable: true,
-				},
-			},
-			{
-				displayName: 'ID',
-				name: 'id',
-				type: 'string',
-				placeholder: 'e.g. 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
-			},
-		],
-	},
+	}),
 	{
 		displayName: 'Amount',
 		name: 'amount',
