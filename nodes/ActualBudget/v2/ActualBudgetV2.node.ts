@@ -26,6 +26,7 @@ import {
 } from './actions/categoryGroup';
 import { noteOperation, noteFields, executeNote } from './actions/note';
 import { payeeOperation, payeeFields, executePayee } from './actions/payee';
+import { queryOperation, queryFields, executeQuery } from './actions/query';
 import { ruleOperation, ruleFields, executeRule } from './actions/rule';
 import { scheduleOperation, scheduleFields, executeSchedule } from './actions/schedule';
 import { tagOperation, tagFields, executeTag } from './actions/tag';
@@ -100,6 +101,10 @@ export class ActualBudgetV2 implements INodeType {
 						value: 'payee',
 					},
 					{
+						name: 'Query',
+						value: 'query',
+					},
+					{
 						name: 'Rule',
 						value: 'rule',
 					},
@@ -125,6 +130,7 @@ export class ActualBudgetV2 implements INodeType {
 			categoryGroupOperation,
 			noteOperation,
 			payeeOperation,
+			queryOperation,
 			ruleOperation,
 			scheduleOperation,
 			tagOperation,
@@ -135,6 +141,7 @@ export class ActualBudgetV2 implements INodeType {
 			...categoryGroupFields,
 			...noteFields,
 			...payeeFields,
+			...queryFields,
 			...ruleFields,
 			...scheduleFields,
 			...tagFields,
@@ -236,6 +243,8 @@ async function dispatch(
 			return executeNote(context, itemIndex, operation);
 		case 'payee':
 			return executePayee(context, itemIndex, operation);
+		case 'query':
+			return executeQuery(context, itemIndex, operation);
 		case 'rule':
 			return executeRule(context, itemIndex, operation);
 		case 'schedule':

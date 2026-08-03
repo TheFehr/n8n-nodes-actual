@@ -85,6 +85,8 @@ vi.mock("@actual-app/api", () => ({
   resetBudgetHold: vi.fn().mockResolvedValue(undefined),
   runBankSync: vi.fn().mockResolvedValue(undefined),
   sync: vi.fn().mockResolvedValue(undefined),
+  q: vi.fn(),
+  aqlQuery: vi.fn().mockResolvedValue([]),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -1736,6 +1738,123 @@ describe("ActualBudget", () => {
     it("note field definition should not mark 'note' as required, so empty strings pass n8n's own validation", () => {
       const noteField = noteFields.find((field) => field.name === "note");
       expect(noteField?.required).not.toBe(true);
+    });
+  });
+
+  describe("query resource", () => {
+    function createFakeQuery() {
+      const fake: Record<string, unknown> = {};
+      for (const method of ["filter", "select", "groupBy", "orderBy", "limit", "offset"]) {
+        fake[method] = vi.fn().mockReturnValue(fake);
+      }
+      return fake as {
+        filter: ReturnType<typeof vi.fn>;
+        select: ReturnType<typeof vi.fn>;
+        groupBy: ReturnType<typeof vi.fn>;
+        orderBy: ReturnType<typeof vi.fn>;
+        limit: ReturnType<typeof vi.fn>;
+        offset: ReturnType<typeof vi.fn>;
+      };
+    }
+
+    let fakeQuery: ReturnType<typeof createFakeQuery>;
+
+    beforeEach(() => {
+      fakeQuery = createFakeQuery();
+      vi.mocked(actualApi.q).mockReturnValue(fakeQuery as unknown as ReturnType<typeof actualApi.q>);
+    });
+
+    it("should build the query from table/filter/select and call aqlQuery", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return '{"amount": {"$lt": 0}}';
+        if (name === "select") return '["date", "amount"]';
+        if (name === "groupBy") return "[]";
+        if (name === "orderBy") return "[]";
+        if (name === "rowLimit") return 0;
+        if (name === "offset") return 0;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.q).toHaveBeenCalledWith("transactions");
+      expect(fakeQuery.filter).toHaveBeenCalledWith({ amount: { $lt: 0 } });
+      expect(fakeQuery.select).toHaveBeenCalledWith(["date", "amount"]);
+      expect(fakeQuery.groupBy).not.toHaveBeenCalled();
+      expect(fakeQuery.orderBy).not.toHaveBeenCalled();
+      expect(fakeQuery.limit).not.toHaveBeenCalled();
+      expect(fakeQuery.offset).not.toHaveBeenCalled();
+      expect(actualApi.aqlQuery).toHaveBeenCalledWith(fakeQuery);
+    });
+
+    it("should apply groupBy/orderBy/limit/offset when provided", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return "{}";
+        if (name === "select") return '"*"';
+        if (name === "groupBy") return '["category"]';
+        if (name === "orderBy") return '["date"]';
+        if (name === "rowLimit") return 10;
+        if (name === "offset") return 5;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(fakeQuery.filter).not.toHaveBeenCalled();
+      expect(fakeQuery.groupBy).toHaveBeenCalledWith(["category"]);
+      expect(fakeQuery.orderBy).toHaveBeenCalledWith(["date"]);
+      expect(fakeQuery.limit).toHaveBeenCalledWith(10);
+      expect(fakeQuery.offset).toHaveBeenCalledWith(5);
+    });
+
+    it("should throw on invalid filter JSON", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return "not json";
+        if (name === "select") return '"*"';
+        if (name === "groupBy") return "[]";
+        if (name === "orderBy") return "[]";
+        if (name === "rowLimit") return 0;
+        if (name === "offset") return 0;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/invalid JSON/);
+    });
+
+    it("should return each row as a separate output item when aqlQuery resolves an array", async () => {
+      vi.mocked(actualApi.aqlQuery).mockResolvedValueOnce([
+        { date: "2024-01-01", amount: -100 },
+        { date: "2024-01-02", amount: -200 },
+      ]);
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return "{}";
+        if (name === "select") return '"*"';
+        if (name === "groupBy") return "[]";
+        if (name === "orderBy") return "[]";
+        if (name === "rowLimit") return 0;
+        if (name === "offset") return 0;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(result[0]).toHaveLength(2);
     });
   });
 
