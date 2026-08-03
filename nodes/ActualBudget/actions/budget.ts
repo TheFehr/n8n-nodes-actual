@@ -48,18 +48,35 @@ export const budgetFields: INodeProperties[] = [
 		},
 	},
 	{
-		displayName: 'Category ID',
+		displayName: 'Category',
 		name: 'categoryId',
-		type: 'string',
-		default: '',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		required: true,
-		description: 'The ID of the budget category',
+		description: 'The budget category',
 		displayOptions: {
 			show: {
 				resource: ['budget'],
 				operation: ['setBudgetAmount'],
 			},
 		},
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				typeOptions: {
+					searchListMethod: 'searchCategories',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
+			},
+		],
 	},
 	{
 		displayName: 'Amount',
@@ -105,7 +122,9 @@ async function handleSetBudgetAmount(
 	itemIndex: number,
 ): Promise<IDataObject> {
 	const month = context.getNodeParameter('month', itemIndex) as string;
-	const categoryId = context.getNodeParameter('categoryId', itemIndex) as string;
+	const categoryId = context.getNodeParameter('categoryId', itemIndex, undefined, {
+		extractValue: true,
+	}) as string;
 	const amount = context.getNodeParameter('amount', itemIndex) as number;
 	await setBudgetAmount(month, categoryId, amount);
 	return { success: true, month, categoryId, amount };

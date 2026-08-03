@@ -10,30 +10,20 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { init, downloadBudget, shutdown } from '@actual-app/api';
+import { Credentials, withBudgetSession } from './GenericFunctions';
 
-import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
+import { accountOperation, accountFields, executeAccount } from './actions/account';
 import { budgetOperation, budgetFields, executeBudget } from './actions/budget';
+import { categoryOperation, categoryFields, executeCategory } from './actions/category';
+import {
+	categoryGroupOperation,
+	categoryGroupFields,
+	executeCategoryGroup,
+} from './actions/categoryGroup';
+import { payeeOperation, payeeFields, executePayee } from './actions/payee';
+import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
 
-interface Credentials {
-	url: string;
-	password: string;
-}
-
-// @actual-app/api stores its session (DB connection, sync clock) in a module-level
-// singleton shared by every execution of this node in the process. Running two
-// executions concurrently lets one's init()/shutdown() tear down state the other is
-// mid-operation on, so all executions are funneled through this queue to run one at a time.
-let executionQueue: Promise<unknown> = Promise.resolve();
-
-function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-	const result = executionQueue.then(fn, fn);
-	executionQueue = result.then(
-		() => undefined,
-		() => undefined,
-	);
-	return result;
-}
+import { searchAccounts, searchCategories, searchCategoryGroups, searchPayees } from './methods/listSearch';
 
 export class ActualBudget implements INodeType {
 	description: INodeTypeDescription = {
@@ -72,8 +62,24 @@ export class ActualBudget implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
+						name: 'Account',
+						value: 'account',
+					},
+					{
 						name: 'Budget',
 						value: 'budget',
+					},
+					{
+						name: 'Category',
+						value: 'category',
+					},
+					{
+						name: 'Category Group',
+						value: 'categoryGroup',
+					},
+					{
+						name: 'Payee',
+						value: 'payee',
 					},
 					{
 						name: 'Transaction',
@@ -83,20 +89,34 @@ export class ActualBudget implements INodeType {
 				default: 'transaction',
 				required: true,
 			},
-			transactionOperation,
+			accountOperation,
 			budgetOperation,
-			...transactionFields,
+			categoryOperation,
+			categoryGroupOperation,
+			payeeOperation,
+			transactionOperation,
+			...accountFields,
 			...budgetFields,
+			...categoryFields,
+			...categoryGroupFields,
+			...payeeFields,
+			...transactionFields,
 		],
 		usableAsTool: undefined,
 	};
 
+	methods = {
+		listSearch: {
+			searchAccounts,
+			searchCategories,
+			searchCategoryGroups,
+			searchPayees,
+		},
+	};
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		// @actual-app/api keeps its session (DB connection, sync clock) in a module-level
-		// singleton, so two executions running at once in this process would tear down or
-		// reinitialize each other's state mid-operation. Serialize executions to avoid that.
 		const continueOnFail = this.continueOnFail();
-		return runExclusive(() => runActualBudget(this, continueOnFail));
+		return runActualBudget(this, continueOnFail);
 	}
 }
 
@@ -105,18 +125,14 @@ async function runActualBudget(
 	continueOnFail: boolean,
 ): Promise<INodeExecutionData[][]> {
 	const items = context.getInputData();
-	const returnData = [];
+	const returnData: IDataObject[] = [];
 
 	const resource = context.getNodeParameter('resource', 0) as string;
 	const operation = context.getNodeParameter('operation', 0) as string;
 	const auth = (await context.getCredentials('actualBudgetApi', 0)) as Credentials;
-	await initializeActualBudget(auth);
+	const budgetId = context.getNodeParameter('budgetId', 0) as string;
 
-	try {
-		const budgetId = context.getNodeParameter('budgetId', 0) as string;
-
-		await downloadBudget(budgetId);
-
+	return withBudgetSession(auth, budgetId, async () => {
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
 				const elementData = await dispatch(context, itemIndex, resource, operation);
@@ -145,9 +161,7 @@ async function runActualBudget(
 		}
 
 		return [context.helpers.returnJsonArray(returnData)];
-	} finally {
-		await shutdown();
-	}
+	});
 }
 
 async function dispatch(
@@ -157,18 +171,19 @@ async function dispatch(
 	operation: string,
 ): Promise<IDataObject | IDataObject[]> {
 	switch (resource) {
-		case 'transaction':
-			return executeTransaction(context, itemIndex, operation);
+		case 'account':
+			return executeAccount(context, itemIndex, operation);
 		case 'budget':
 			return executeBudget(context, itemIndex, operation);
+		case 'category':
+			return executeCategory(context, itemIndex, operation);
+		case 'categoryGroup':
+			return executeCategoryGroup(context, itemIndex, operation);
+		case 'payee':
+			return executePayee(context, itemIndex, operation);
+		case 'transaction':
+			return executeTransaction(context, itemIndex, operation);
 		default:
 			throw new NodeOperationError(context.getNode(), `Unknown resource "${resource}"`);
 	}
-}
-
-async function initializeActualBudget(auth: Credentials): Promise<void> {
-	await init({
-		serverURL: auth.url,
-		password: auth.password,
-	});
 }
