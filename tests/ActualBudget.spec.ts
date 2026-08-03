@@ -69,6 +69,12 @@ vi.mock("@actual-app/api", () => ({
   createSchedule: vi.fn().mockResolvedValue("sched-new"),
   updateSchedule: vi.fn().mockResolvedValue("sched-1"),
   deleteSchedule: vi.fn().mockResolvedValue(undefined),
+  getTags: vi.fn().mockResolvedValue([{ id: "tag-1", tag: "#reimbursable", color: "", description: "" }]),
+  createTag: vi.fn().mockResolvedValue("tag-new"),
+  updateTag: vi.fn().mockResolvedValue(undefined),
+  deleteTag: vi.fn().mockResolvedValue(undefined),
+  getNote: vi.fn().mockResolvedValue({ id: "acc-1", note: "Existing note" }),
+  updateNote: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -1437,6 +1443,103 @@ describe("ActualBudget", () => {
       await node.execute.call(executeFunctions);
 
       expect(actualApi.deleteSchedule).toHaveBeenCalledWith("sched-1");
+    });
+  });
+
+  describe("tag resource", () => {
+    it("should call getTags and return each tag as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getTags";
+        if (name === "resource") return "tag";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getTags).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+    });
+
+    it("should call createTag with tag, color, and description", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createTag";
+        if (name === "resource") return "tag";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "tag") return "#travel";
+        if (name === "color") return "#ff0000";
+        if (name === "description") return "Travel expenses";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.createTag).toHaveBeenCalledWith({
+        tag: "#travel",
+        color: "#ff0000",
+        description: "Travel expenses",
+      });
+    });
+
+    it("should call updateTag with the resolved tag ID and update fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateTag";
+        if (name === "resource") return "tag";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "tagId") return "tag-1";
+        if (name === "updateFields") return { color: "#00ff00" };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateTag).toHaveBeenCalledWith("tag-1", { color: "#00ff00" });
+    });
+
+    it("should call deleteTag with the resolved tag ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteTag";
+        if (name === "resource") return "tag";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "tagId") return "tag-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteTag).toHaveBeenCalledWith("tag-1");
+    });
+  });
+
+  describe("note resource", () => {
+    it("should call getNote with the entity ID and return the note", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getNote";
+        if (name === "resource") return "note";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "entityId") return "acc-1";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getNote).toHaveBeenCalledWith("acc-1");
+      expect(result[0][0].json).toEqual({ id: "acc-1", note: "Existing note" });
+    });
+
+    it("should call updateNote with the entity ID and note text", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateNote";
+        if (name === "resource") return "note";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "entityId") return "acc-1";
+        if (name === "note") return "New note text";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateNote).toHaveBeenCalledWith("acc-1", "New note text");
     });
   });
 

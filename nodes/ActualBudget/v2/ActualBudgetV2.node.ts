@@ -24,12 +24,20 @@ import {
 	categoryGroupFields,
 	executeCategoryGroup,
 } from './actions/categoryGroup';
+import { noteOperation, noteFields, executeNote } from './actions/note';
 import { payeeOperation, payeeFields, executePayee } from './actions/payee';
 import { ruleOperation, ruleFields, executeRule } from './actions/rule';
 import { scheduleOperation, scheduleFields, executeSchedule } from './actions/schedule';
+import { tagOperation, tagFields, executeTag } from './actions/tag';
 import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
 
-import { searchAccounts, searchCategories, searchCategoryGroups, searchPayees } from './methods/listSearch';
+import {
+	searchAccounts,
+	searchCategories,
+	searchCategoryGroups,
+	searchPayees,
+	searchTags,
+} from './methods/listSearch';
 
 export class ActualBudgetV2 implements INodeType {
 	description: INodeTypeDescription = {
@@ -84,6 +92,10 @@ export class ActualBudgetV2 implements INodeType {
 						value: 'categoryGroup',
 					},
 					{
+						name: 'Note',
+						value: 'note',
+					},
+					{
 						name: 'Payee',
 						value: 'payee',
 					},
@@ -94,6 +106,10 @@ export class ActualBudgetV2 implements INodeType {
 					{
 						name: 'Schedule',
 						value: 'schedule',
+					},
+					{
+						name: 'Tag',
+						value: 'tag',
 					},
 					{
 						name: 'Transaction',
@@ -107,17 +123,21 @@ export class ActualBudgetV2 implements INodeType {
 			budgetOperation,
 			categoryOperation,
 			categoryGroupOperation,
+			noteOperation,
 			payeeOperation,
 			ruleOperation,
 			scheduleOperation,
+			tagOperation,
 			transactionOperation,
 			...accountFields,
 			...budgetFields,
 			...categoryFields,
 			...categoryGroupFields,
+			...noteFields,
 			...payeeFields,
 			...ruleFields,
 			...scheduleFields,
+			...tagFields,
 			...transactionFields,
 		],
 		usableAsTool: undefined,
@@ -129,6 +149,7 @@ export class ActualBudgetV2 implements INodeType {
 			searchCategories,
 			searchCategoryGroups,
 			searchPayees,
+			searchTags,
 		},
 	};
 
@@ -211,12 +232,16 @@ async function dispatch(
 			return executeCategory(context, itemIndex, operation);
 		case 'categoryGroup':
 			return executeCategoryGroup(context, itemIndex, operation);
+		case 'note':
+			return executeNote(context, itemIndex, operation);
 		case 'payee':
 			return executePayee(context, itemIndex, operation);
 		case 'rule':
 			return executeRule(context, itemIndex, operation);
 		case 'schedule':
 			return executeSchedule(context, itemIndex, operation);
+		case 'tag':
+			return executeTag(context, itemIndex, operation);
 		case 'transaction':
 			return executeTransaction(context, itemIndex, operation);
 		default:
