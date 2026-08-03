@@ -5,6 +5,10 @@
   "platformAutomerge": true,
   "packageRules": [
     {
+      "matchPackageNames": ["@actual-app/api"],
+      "enabled": false
+    },
+    {
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
       "automerge": true,
       "automergeType": "pr",
