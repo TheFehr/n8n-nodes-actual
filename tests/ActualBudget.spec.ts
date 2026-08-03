@@ -40,6 +40,12 @@ vi.mock("@actual-app/api", () => ({
   getPayees: vi.fn().mockResolvedValue([
     { id: "payee-1", name: "Landlord" },
   ]),
+  createAccount: vi.fn().mockResolvedValue("acc-new"),
+  updateAccount: vi.fn().mockResolvedValue(undefined),
+  closeAccount: vi.fn().mockResolvedValue(undefined),
+  reopenAccount: vi.fn().mockResolvedValue(undefined),
+  deleteAccount: vi.fn().mockResolvedValue(undefined),
+  getAccountBalance: vi.fn().mockResolvedValue(123400),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -679,6 +685,119 @@ describe("ActualBudget", () => {
         { id: "acc-1", name: "Checking" },
         { id: "acc-2", name: "Savings" },
       ]);
+    });
+
+    it("should call createAccount with name, offbudget, and initialBalance", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createAccount";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "New Account";
+        if (name === "offbudget") return true;
+        if (name === "initialBalance") return 5000;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.createAccount).toHaveBeenCalledWith(
+        { name: "New Account", offbudget: true },
+        5000,
+      );
+      expect(result[0][0].json).toEqual({ id: "acc-new", name: "New Account", offbudget: true });
+    });
+
+    it("should call updateAccount with the resolved account ID and update fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateAccount";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        if (name === "updateFields") return { name: "Renamed" };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateAccount).toHaveBeenCalledWith("acc-1", { name: "Renamed" });
+    });
+
+    it("should call closeAccount with transfer account/category when provided", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "closeAccount";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        if (name === "transferAccountId") return "acc-2";
+        if (name === "transferCategoryId") return "cat-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.closeAccount).toHaveBeenCalledWith("acc-1", "acc-2", "cat-1");
+    });
+
+    it("should call reopenAccount with the resolved account ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "reopenAccount";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.reopenAccount).toHaveBeenCalledWith("acc-1");
+    });
+
+    it("should call deleteAccount with the resolved account ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteAccount";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteAccount).toHaveBeenCalledWith("acc-1");
+    });
+
+    it("should call getAccountBalance with the resolved account ID and no cutoff when unset", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getAccountBalance";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        if (name === "cutoff") return "";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getAccountBalance).toHaveBeenCalledWith("acc-1", undefined);
+      expect(result[0][0].json).toEqual({ id: "acc-1", balance: 123400 });
+    });
+
+    it("should call getAccountBalance with a cutoff Date when provided", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getAccountBalance";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "acc-1";
+        if (name === "cutoff") return "2024-03-01T00:00:00.000Z";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.getAccountBalance).toHaveBeenCalledWith(
+        "acc-1",
+        new Date("2024-03-01T00:00:00.000Z"),
+      );
     });
   });
 
