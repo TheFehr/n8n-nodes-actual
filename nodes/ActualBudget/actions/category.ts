@@ -117,10 +117,10 @@ export const categoryFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Name',
-				name: 'name',
-				type: 'string',
-				default: '',
+				displayName: 'Hidden',
+				name: 'hidden',
+				type: 'boolean',
+				default: false,
 			},
 			{
 				displayName: 'Is Income',
@@ -129,10 +129,10 @@ export const categoryFields: INodeProperties[] = [
 				default: false,
 			},
 			{
-				displayName: 'Hidden',
-				name: 'hidden',
-				type: 'boolean',
-				default: false,
+				displayName: 'Name',
+				name: 'name',
+				type: 'string',
+				default: '',
 			},
 		],
 	},

@@ -57,6 +57,9 @@ vi.mock("@actual-app/api", () => ({
   deletePayee: vi.fn().mockResolvedValue(undefined),
   mergePayees: vi.fn().mockResolvedValue(undefined),
   getCommonPayees: vi.fn().mockResolvedValue([{ id: "payee-1", name: "Landlord" }]),
+  addTransactions: vi.fn().mockResolvedValue("ok"),
+  updateTransaction: vi.fn().mockResolvedValue([{ id: "tx-001" }]),
+  deleteTransaction: vi.fn().mockResolvedValue([{ id: "tx-001" }]),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -422,6 +425,63 @@ describe("ActualBudget", () => {
 
       expect(result).toBeDefined();
       expect(actualApi.getTransactions).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("addTransactions operation", () => {
+    it("should call addTransactions with accountId, transactions, and options", async () => {
+      const transactions = [{ date: "2024-01-15", amount: -1000 }];
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "addTransactions";
+        if (name === "resource") return "transaction";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "accountId") return "account-abc";
+        if (name === "transactions") return transactions;
+        if (name === "learnCategories") return true;
+        if (name === "runTransfers") return false;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.addTransactions).toHaveBeenCalledWith("account-abc", transactions, {
+        learnCategories: true,
+        runTransfers: false,
+      });
+      expect(result[0][0].json).toEqual({ result: "ok" });
+    });
+  });
+
+  describe("updateTransaction operation", () => {
+    it("should call updateTransaction with the transaction ID and update fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateTransaction";
+        if (name === "resource") return "transaction";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "transactionId") return "tx-001";
+        if (name === "updateFields") return { notes: "Updated" };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateTransaction).toHaveBeenCalledWith("tx-001", { notes: "Updated" });
+    });
+  });
+
+  describe("deleteTransaction operation", () => {
+    it("should call deleteTransaction with the transaction ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteTransaction";
+        if (name === "resource") return "transaction";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "transactionId") return "tx-001";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteTransaction).toHaveBeenCalledWith("tx-001");
     });
   });
 
