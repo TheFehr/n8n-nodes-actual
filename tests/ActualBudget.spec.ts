@@ -52,6 +52,11 @@ vi.mock("@actual-app/api", () => ({
   createCategoryGroup: vi.fn().mockResolvedValue("grp-new"),
   updateCategoryGroup: vi.fn().mockResolvedValue(undefined),
   deleteCategoryGroup: vi.fn().mockResolvedValue(undefined),
+  createPayee: vi.fn().mockResolvedValue("payee-new"),
+  updatePayee: vi.fn().mockResolvedValue(undefined),
+  deletePayee: vi.fn().mockResolvedValue(undefined),
+  mergePayees: vi.fn().mockResolvedValue(undefined),
+  getCommonPayees: vi.fn().mockResolvedValue([{ id: "payee-1", name: "Landlord" }]),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -978,6 +983,80 @@ describe("ActualBudget", () => {
       expect(actualApi.getPayees).toHaveBeenCalled();
       expect(result[0]).toHaveLength(1);
       expect(result[0][0].json).toEqual({ id: "payee-1", name: "Landlord" });
+    });
+
+    it("should call getCommonPayees and return each payee as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getCommonPayees";
+        if (name === "resource") return "payee";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getCommonPayees).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+      expect(result[0][0].json).toEqual({ id: "payee-1", name: "Landlord" });
+    });
+
+    it("should call createPayee with the given name", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createPayee";
+        if (name === "resource") return "payee";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "New Payee";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.createPayee).toHaveBeenCalledWith({ name: "New Payee" });
+      expect(result[0][0].json).toEqual({ id: "payee-new", name: "New Payee" });
+    });
+
+    it("should call updatePayee with the resolved payee ID and update fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updatePayee";
+        if (name === "resource") return "payee";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "payeeId") return "payee-1";
+        if (name === "updateFields") return { name: "Renamed Payee" };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updatePayee).toHaveBeenCalledWith("payee-1", { name: "Renamed Payee" });
+    });
+
+    it("should call deletePayee with the resolved payee ID", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deletePayee";
+        if (name === "resource") return "payee";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "payeeId") return "payee-1";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deletePayee).toHaveBeenCalledWith("payee-1");
+    });
+
+    it("should call mergePayees with the target and merge IDs", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "mergePayees";
+        if (name === "resource") return "payee";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "targetPayeeId") return "payee-1";
+        if (name === "mergeIds") return ["payee-2", "payee-3"];
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.mergePayees).toHaveBeenCalledWith("payee-1", ["payee-2", "payee-3"]);
     });
   });
 
