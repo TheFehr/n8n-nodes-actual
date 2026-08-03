@@ -46,6 +46,12 @@ vi.mock("@actual-app/api", () => ({
   reopenAccount: vi.fn().mockResolvedValue(undefined),
   deleteAccount: vi.fn().mockResolvedValue(undefined),
   getAccountBalance: vi.fn().mockResolvedValue(123400),
+  createCategory: vi.fn().mockResolvedValue("cat-new"),
+  updateCategory: vi.fn().mockResolvedValue(undefined),
+  deleteCategory: vi.fn().mockResolvedValue(undefined),
+  createCategoryGroup: vi.fn().mockResolvedValue("grp-new"),
+  updateCategoryGroup: vi.fn().mockResolvedValue(undefined),
+  deleteCategoryGroup: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -731,6 +737,59 @@ describe("ActualBudget", () => {
       expect(result[0]).toHaveLength(1);
       expect(result[0][0].json).toEqual({ id: "cat-1", name: "Groceries", group_id: "grp-1" });
     });
+
+    it("should call createCategory with name, group_id, is_income, and hidden", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createCategory";
+        if (name === "resource") return "category";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "Utilities";
+        if (name === "groupId") return "grp-1";
+        if (name === "is_income") return false;
+        if (name === "hidden") return false;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.createCategory).toHaveBeenCalledWith({
+        name: "Utilities",
+        group_id: "grp-1",
+        is_income: false,
+        hidden: false,
+      });
+      expect(result[0][0].json).toMatchObject({ id: "cat-new", name: "Utilities" });
+    });
+
+    it("should call updateCategory with the resolved category ID and update fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateCategory";
+        if (name === "resource") return "category";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "categoryId") return "cat-1";
+        if (name === "updateFields") return { name: "Groceries & Household" };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", { name: "Groceries & Household" });
+    });
+
+    it("should call deleteCategory with the resolved category ID and transfer category", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteCategory";
+        if (name === "resource") return "category";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "categoryId") return "cat-1";
+        if (name === "transferCategoryId") return "cat-2";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteCategory).toHaveBeenCalledWith("cat-1", "cat-2");
+    });
   });
 
   describe("categoryGroup resource", () => {
@@ -747,6 +806,57 @@ describe("ActualBudget", () => {
       expect(actualApi.getCategoryGroups).toHaveBeenCalled();
       expect(result[0]).toHaveLength(1);
       expect((result[0][0].json as IDataObject).name).toBe("Food");
+    });
+
+    it("should call createCategoryGroup with name, is_income, and hidden", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createCategoryGroup";
+        if (name === "resource") return "categoryGroup";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "Subscriptions";
+        if (name === "is_income") return false;
+        if (name === "hidden") return false;
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.createCategoryGroup).toHaveBeenCalledWith({
+        name: "Subscriptions",
+        is_income: false,
+        hidden: false,
+      });
+      expect(result[0][0].json).toMatchObject({ id: "grp-new", name: "Subscriptions" });
+    });
+
+    it("should call updateCategoryGroup with the resolved group ID and update fields", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateCategoryGroup";
+        if (name === "resource") return "categoryGroup";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "categoryGroupId") return "grp-1";
+        if (name === "updateFields") return { hidden: true };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateCategoryGroup).toHaveBeenCalledWith("grp-1", { hidden: true });
+    });
+
+    it("should call deleteCategoryGroup with the resolved group ID and transfer category", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "deleteCategoryGroup";
+        if (name === "resource") return "categoryGroup";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "categoryGroupId") return "grp-1";
+        if (name === "transferCategoryId") return "cat-2";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.deleteCategoryGroup).toHaveBeenCalledWith("grp-1", "cat-2");
     });
   });
 
