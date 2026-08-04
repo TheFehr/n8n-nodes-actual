@@ -137,4 +137,27 @@ describe("ActualBudgetV1 (frozen pre-refactor behavior)", () => {
 
     expect(actualApi.setBudgetAmount).toHaveBeenCalledWith("2024-01", "cat-abc", 100.5);
   });
+
+  it("re-downloads the budget when budgetId differs between items, and skips it when unchanged", async () => {
+    const items = [
+      { budgetId: "budget-A", accountId: "account-1" },
+      { budgetId: "budget-A", accountId: "account-2" },
+      { budgetId: "budget-B", accountId: "account-3" },
+    ];
+    executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
+    executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "budgetId") return items[itemIndex].budgetId;
+      if (name === "accountId") return items[itemIndex].accountId;
+      if (name === "transactions") return [{ date: "2024-01-15", amount: -100 }];
+      return undefined;
+    });
+
+    await node.execute.call(executeFunctions);
+
+    expect(actualApi.downloadBudget).toHaveBeenCalledTimes(2);
+    expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(1, "budget-A");
+    expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(2, "budget-B");
+    expect(actualApi.importTransactions).toHaveBeenCalledTimes(3);
+  });
 });

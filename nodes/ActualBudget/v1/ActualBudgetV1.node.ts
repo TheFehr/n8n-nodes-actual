@@ -20,6 +20,8 @@ import {
 	shutdown,
 } from '@actual-app/api';
 
+import { runExclusive } from '../executionQueue';
+
 interface ActualTransaction {
 	date: string;
 	amount: number;
@@ -37,26 +39,12 @@ interface Credentials {
 	password: string;
 }
 
-// @actual-app/api stores its session (DB connection, sync clock) in a module-level
-// singleton shared by every execution of this node in the process. Running two
-// executions concurrently lets one's init()/shutdown() tear down state the other is
-// mid-operation on, so all executions are funneled through this queue to run one at a time.
-let executionQueue: Promise<unknown> = Promise.resolve();
-
-function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-	const result = executionQueue.then(fn, fn);
-	executionQueue = result.then(
-		() => undefined,
-		() => undefined,
-	);
-	return result;
-}
-
 // This is a frozen snapshot of the pre-resource/operation-refactor node (see
-// ../v2/ActualBudgetV2.node.ts), kept byte-for-byte behavior-identical so existing saved
-// workflows (typeVersion 1, no "resource" parameter stored) keep executing exactly as
-// before. Do not "fix" or modernize this file - changes here would change behavior for
-// already-saved nodes with no opt-in. New functionality belongs in v2.
+// ../v2/ActualBudgetV2.node.ts), kept behavior-identical for existing saved workflows
+// (typeVersion 1, no "resource" parameter stored) - no new functionality, no API surface
+// changes. Genuine bug fixes (a session-safety fix, a dead parameter reference, a
+// silently-wrong-results fix) are still applied here when they don't change the intended
+// behavior for the overwhelmingly common case. New functionality belongs in v2.
 export class ActualBudgetV1 implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ActualBudget',
@@ -64,7 +52,7 @@ export class ActualBudgetV1 implements INodeType {
 		icon: 'file:../actualbudget.svg',
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"] + " " + $parameter["resource"]}}',
+		subtitle: '={{$parameter["operation"]}}',
 		description: 'Consume ActualBudget API',
 		defaults: {
 			name: 'ActualBudget',
@@ -232,12 +220,16 @@ async function runActualBudget(
 	await initializeActualBudget(auth);
 
 	try {
-		const budgetId = context.getNodeParameter('budgetId', 0) as string;
-
-		await downloadBudget(budgetId);
+		let loadedBudgetId: string | undefined;
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
+				const budgetId = context.getNodeParameter('budgetId', itemIndex) as string;
+				if (budgetId !== loadedBudgetId) {
+					await downloadBudget(budgetId);
+					loadedBudgetId = budgetId;
+				}
+
 				let elementData;
 				switch (action) {
 					case 'getBudgetMonth':

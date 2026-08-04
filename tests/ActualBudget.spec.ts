@@ -90,6 +90,32 @@ describe("ActualBudget", () => {
     expect(actualApi.downloadBudget).toHaveBeenCalledWith("my-budget-group-id");
   });
 
+  it("should re-download the budget when budgetId differs between items, and skip it when unchanged", async () => {
+    const items = [
+      { budgetId: "budget-A", accountId: "account-1" },
+      { budgetId: "budget-A", accountId: "account-2" },
+      { budgetId: "budget-B", accountId: "account-3" },
+    ];
+    executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
+    executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return items[itemIndex].budgetId;
+      if (name === "accountId") return items[itemIndex].accountId;
+      if (name === "transactions") return [{ date: "2024-01-15", amount: -100 }];
+      return undefined;
+    });
+
+    await node.execute.call(executeFunctions);
+
+    // Same budgetId for items 0 and 1 -> only one download; item 2's different budgetId
+    // triggers a second one.
+    expect(actualApi.downloadBudget).toHaveBeenCalledTimes(2);
+    expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(1, "budget-A");
+    expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(2, "budget-B");
+    expect(actualApi.importTransactions).toHaveBeenCalledTimes(3);
+  });
+
   it("should call importTransactions with accountId and transactions", async () => {
     const transactions = [
       { date: "2024-01-15", amount: -1000, notes: "Grocery run" },
@@ -139,13 +165,27 @@ describe("ActualBudget", () => {
     expect(actualApi.importTransactions).not.toHaveBeenCalled();
   });
 
-  it("should throw when a transaction's amount is not a finite number", async () => {
+  it("should throw when a transaction's amount is not a number", async () => {
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
       if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "account-abc";
       if (name === "transactions") return [{ date: "2024-02-01", amount: "100" }];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"amount"/);
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
+  });
+
+  it("should throw when a transaction's amount is not finite (Infinity/NaN)", async () => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return [{ date: "2024-02-01", amount: Infinity }];
       return undefined;
     });
 

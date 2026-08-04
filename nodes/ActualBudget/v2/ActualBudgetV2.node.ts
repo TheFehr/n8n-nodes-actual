@@ -12,27 +12,14 @@ import {
 
 import { init, downloadBudget, shutdown } from '@actual-app/api';
 
+import { runExclusive } from '../executionQueue';
+
 import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
 import { budgetOperation, budgetFields, executeBudget } from './actions/budget';
 
 interface Credentials {
 	url: string;
 	password: string;
-}
-
-// @actual-app/api stores its session (DB connection, sync clock) in a module-level
-// singleton shared by every execution of this node in the process. Running two
-// executions concurrently lets one's init()/shutdown() tear down state the other is
-// mid-operation on, so all executions are funneled through this queue to run one at a time.
-let executionQueue: Promise<unknown> = Promise.resolve();
-
-function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-	const result = executionQueue.then(fn, fn);
-	executionQueue = result.then(
-		() => undefined,
-		() => undefined,
-	);
-	return result;
 }
 
 export class ActualBudgetV2 implements INodeType {
@@ -113,12 +100,16 @@ async function runActualBudget(
 	await initializeActualBudget(auth);
 
 	try {
-		const budgetId = context.getNodeParameter('budgetId', 0) as string;
-
-		await downloadBudget(budgetId);
+		let loadedBudgetId: string | undefined;
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
+				const budgetId = context.getNodeParameter('budgetId', itemIndex) as string;
+				if (budgetId !== loadedBudgetId) {
+					await downloadBudget(budgetId);
+					loadedBudgetId = budgetId;
+				}
+
 				const elementData = await dispatch(context, itemIndex, resource, operation);
 				if (Array.isArray(elementData)) {
 					returnData.push(...elementData);
