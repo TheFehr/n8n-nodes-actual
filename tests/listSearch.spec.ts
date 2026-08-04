@@ -30,7 +30,7 @@ vi.mock("@actual-app/api", () => ({
   ]),
 }));
 
-import { searchAccounts, searchPayees, searchCategories, searchCategoryGroups, searchTags } from "../nodes/ActualBudget/methods/listSearch";
+import { searchAccounts, searchPayees, searchCategories, searchCategoryGroups, searchTags } from "../nodes/ActualBudget/v2/methods/listSearch";
 
 function makeLoadOptionsContext(budgetId: string): ILoadOptionsFunctions {
   return {

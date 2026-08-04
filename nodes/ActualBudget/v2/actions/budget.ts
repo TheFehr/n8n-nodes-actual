@@ -166,6 +166,12 @@ export const budgetFields: INodeProperties[] = [
 	}),
 ];
 
+function assertIntegerAmount(context: IExecuteFunctions, amount: number): void {
+	if (!Number.isInteger(amount)) {
+		throw new NodeOperationError(context.getNode(), '"amount" must be an integer number of millicents');
+	}
+}
+
 export async function executeBudget(
 	context: IExecuteFunctions,
 	itemIndex: number,
@@ -217,6 +223,7 @@ async function handleSetBudgetAmount(
 		extractValue: true,
 	}) as string;
 	const amount = context.getNodeParameter('amount', itemIndex) as number;
+	assertIntegerAmount(context, amount);
 	await setBudgetAmount(month, categoryId, amount);
 	return { success: true, month, categoryId, amount };
 }
@@ -240,6 +247,7 @@ async function handleHoldBudgetForNextMonth(
 ): Promise<IDataObject> {
 	const month = context.getNodeParameter('month', itemIndex) as string;
 	const amount = context.getNodeParameter('amount', itemIndex) as number;
+	assertIntegerAmount(context, amount);
 	const success = await holdBudgetForNextMonth(month, amount);
 	return { success, month, amount };
 }

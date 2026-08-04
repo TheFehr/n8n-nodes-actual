@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { ActualBudget } from "../nodes/ActualBudget/ActualBudget.node";
+import { ActualBudgetV2 } from "../nodes/ActualBudget/v2/ActualBudgetV2.node";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 import * as api from "@actual-app/api";
 import { mkdtempSync } from "fs";
@@ -28,7 +28,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       { date: "2024-03-01", amount: -2500, notes: "Integration test transaction" },
     ];
 
-    const node = new ActualBudget();
+    const node = new ActualBudgetV2();
     const executeFunctions = {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
@@ -89,8 +89,8 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         },
       }) as unknown as IExecuteFunctions;
 
-    const nodeA = new ActualBudget();
-    const nodeB = new ActualBudget();
+    const nodeA = new ActualBudgetV2();
+    const nodeB = new ActualBudgetV2();
 
     const [resultA, resultB] = await Promise.all([
       nodeA.execute.call(makeExecuteFunctions("Concurrent A", -100)),
@@ -116,7 +116,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
   }, 15000);
 
   it("should get budget month data via the node", async () => {
-    const node = new ActualBudget();
+    const node = new ActualBudgetV2();
     const executeFunctions = {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
@@ -149,7 +149,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
   }, 15000);
 
   it("should set budget amount via the node and reflect it in the budget", async () => {
-    const node = new ActualBudget();
+    const node = new ActualBudgetV2();
     const executeFunctions = {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {
@@ -188,7 +188,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
   }, 30000);
 
   it("should get transactions via the node", async () => {
-    const node = new ActualBudget();
+    const node = new ActualBudgetV2();
     const executeFunctions = {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {

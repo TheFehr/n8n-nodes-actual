@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ActualBudget } from "../nodes/ActualBudget/ActualBudget.node";
+import { ActualBudgetV2 } from "../nodes/ActualBudget/v2/ActualBudgetV2.node";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 
 vi.mock("@actual-app/api", () => ({
@@ -91,12 +91,12 @@ vi.mock("@actual-app/api", () => ({
 import * as actualApi from "@actual-app/api";
 
 describe("ActualBudget", () => {
-  let node: ActualBudget;
+  let node: ActualBudgetV2;
   let executeFunctions: IExecuteFunctions;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    node = new ActualBudget();
+    node = new ActualBudgetV2();
     executeFunctions = {
       getInputData: vi.fn().mockReturnValue([{ json: {} }]),
       getNodeParameter: vi.fn(),
@@ -182,6 +182,34 @@ describe("ActualBudget", () => {
     await node.execute.call(executeFunctions);
 
     expect(actualApi.importTransactions).toHaveBeenCalledWith("account-abc", transactions);
+  });
+
+  it("should throw when a transaction's date is not a string", async () => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return [{ date: 20240201, amount: -750 }];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"date"/);
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
+  });
+
+  it("should throw when a transaction's amount is not a finite number", async () => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return [{ date: "2024-02-01", amount: "100" }];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"amount"/);
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
   });
 
   it("should call shutdown after successful execution", async () => {
@@ -604,6 +632,21 @@ describe("ActualBudget", () => {
       expect(actualApi.setBudgetAmount).toHaveBeenCalledWith("2024-03", "cat-abc", 100000);
     });
 
+    it("should throw on a fractional (non-integer) amount", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "amount") return 100.5;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/integer/);
+      expect(actualApi.setBudgetAmount).not.toHaveBeenCalled();
+    });
+
     it("should return echo object with written parameters", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "setBudgetAmount";
@@ -770,6 +813,20 @@ describe("ActualBudget", () => {
 
       expect(actualApi.holdBudgetForNextMonth).toHaveBeenCalledWith("2024-03", 20000);
       expect(result[0][0].json).toEqual({ success: true, month: "2024-03", amount: 20000 });
+    });
+
+    it("should throw on a fractional (non-integer) hold amount", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "holdBudgetForNextMonth";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "amount") return 20000.25;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/integer/);
+      expect(actualApi.holdBudgetForNextMonth).not.toHaveBeenCalled();
     });
 
     it("should call resetBudgetHold with month", async () => {
@@ -1631,8 +1688,8 @@ describe("ActualBudget", () => {
         callOrder.push("shutdown");
       });
 
-      const nodeA = new ActualBudget();
-      const nodeB = new ActualBudget();
+      const nodeA = new ActualBudgetV2();
+      const nodeB = new ActualBudgetV2();
 
       const execA = nodeA.execute.call(makeExecuteFunctions("budget-A", "account-A"));
       // Let execution A block on its (gated) importTransactions call before starting B.
