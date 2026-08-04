@@ -107,6 +107,9 @@ async function handleSetBudgetAmount(
 	const month = context.getNodeParameter('month', itemIndex) as string;
 	const categoryId = context.getNodeParameter('categoryId', itemIndex) as string;
 	const amount = context.getNodeParameter('amount', itemIndex) as number;
+	if (!Number.isInteger(amount)) {
+		throw new NodeOperationError(context.getNode(), '"amount" must be an integer number of millicents');
+	}
 	await setBudgetAmount(month, categoryId, amount);
 	return { success: true, month, categoryId, amount };
 }

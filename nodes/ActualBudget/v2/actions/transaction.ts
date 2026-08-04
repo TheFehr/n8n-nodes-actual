@@ -157,11 +157,25 @@ async function handleImportTransactions(
 		throw new NodeOperationError(context.getNode(), `"transactions" must be a JSON array, got ${typeof parsed}`);
 	}
 	for (const item of parsed) {
-		if (typeof item !== 'object' || item === null || !('date' in item) || !('amount' in item)) {
-			throw new NodeOperationError(context.getNode(), 'Each transaction must have "date" and "amount" fields');
+		if (!isActualTransaction(item)) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Each transaction must have a non-empty string "date" and a finite numeric "amount"',
+			);
 		}
 	}
 	const transactions = parsed as ActualTransaction[];
 
 	return (await importTransactions(accountId, transactions)) as unknown as IDataObject;
+}
+
+function isActualTransaction(value: unknown): value is ActualTransaction {
+	if (typeof value !== 'object' || value === null) return false;
+	const transaction = value as Record<string, unknown>;
+	return (
+		typeof transaction.date === 'string' &&
+		transaction.date.length > 0 &&
+		typeof transaction.amount === 'number' &&
+		Number.isFinite(transaction.amount)
+	);
 }
