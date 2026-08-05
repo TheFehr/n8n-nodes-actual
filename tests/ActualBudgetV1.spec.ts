@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ActualBudgetV1 } from "../nodes/ActualBudget/v1/ActualBudgetV1.node";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 
@@ -63,8 +63,17 @@ describe("ActualBudgetV1 (frozen pre-refactor behavior)", () => {
     } as unknown as IExecuteFunctions;
   });
 
+  afterEach(() => {
+    // Proves getNodeParameter("resource", ...) was genuinely never called, rather than just
+    // that the mock happened to return undefined for it - a regression that calls it and
+    // ignores the (undefined) result would still pass the latter but not this.
+    const requestedParamNames = executeFunctions.getNodeParameter.mock.calls.map(([name]) => name);
+    expect(requestedParamNames).not.toContain("resource");
+  });
+
   it("reports itself as version 1 with no resource property", () => {
     expect(node.description.version).toBe(1);
+    expect(node.description.subtitle).toBe('={{$parameter["operation"]}}');
     const propertyNames = node.description.properties.map((p) => p.name);
     expect(propertyNames).not.toContain("resource");
     expect(propertyNames).toContain("operation");
@@ -102,9 +111,15 @@ describe("ActualBudgetV1 (frozen pre-refactor behavior)", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions);
+    const result = await node.execute.call(executeFunctions);
 
     expect(actualApi.getTransactions).toHaveBeenCalledWith("acc-abc", "2024-01-01", "2024-01-31");
+    expect(result[0][0].json).toEqual({
+      id: "tx-001",
+      date: "2024-01-15",
+      amount: -1000,
+      account: "acc-1",
+    });
   });
 
   it("runs getBudgetMonth via the flat operation dropdown", async () => {
@@ -115,9 +130,22 @@ describe("ActualBudgetV1 (frozen pre-refactor behavior)", () => {
       return undefined;
     });
 
-    await node.execute.call(executeFunctions);
+    const result = await node.execute.call(executeFunctions);
 
     expect(actualApi.getBudgetMonth).toHaveBeenCalledWith("2024-01");
+    expect(result[0][0].json).toEqual({
+      month: "2024-01",
+      incomeAvailable: 500000,
+      lastMonthOverspent: 0,
+      forNextMonth: 0,
+      totalBudgeted: 300000,
+      toBudget: 200000,
+      fromLastMonth: 0,
+      totalIncome: 500000,
+      totalSpent: -300000,
+      totalBalance: 200000,
+      categoryGroups: [],
+    });
   });
 
   it("runs setBudgetAmount via the flat operation dropdown, accepting fractional amounts unchanged", async () => {
@@ -159,5 +187,14 @@ describe("ActualBudgetV1 (frozen pre-refactor behavior)", () => {
     expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(1, "budget-A");
     expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(2, "budget-B");
     expect(actualApi.importTransactions).toHaveBeenCalledTimes(3);
+    expect(actualApi.importTransactions).toHaveBeenNthCalledWith(1, "account-1", [
+      { date: "2024-01-15", amount: -100 },
+    ]);
+    expect(actualApi.importTransactions).toHaveBeenNthCalledWith(2, "account-2", [
+      { date: "2024-01-15", amount: -100 },
+    ]);
+    expect(actualApi.importTransactions).toHaveBeenNthCalledWith(3, "account-3", [
+      { date: "2024-01-15", amount: -100 },
+    ]);
   });
 });
