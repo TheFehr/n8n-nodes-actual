@@ -98,19 +98,6 @@ export const scheduleFields: INodeProperties[] = [
 		},
 	}),
 	{
-		displayName: 'Amount',
-		name: 'amount',
-		type: 'number',
-		default: 0,
-		description: 'Amount in cents',
-		displayOptions: {
-			show: {
-				resource: ['schedule'],
-				operation: ['createSchedule'],
-			},
-		},
-	},
-	{
 		displayName: 'Amount Operator',
 		name: 'amountOp',
 		type: 'options',
@@ -124,10 +111,53 @@ export const scheduleFields: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Amount',
+		name: 'amount',
+		type: 'number',
+		default: 0,
+		description: 'Amount in cents',
+		displayOptions: {
+			show: {
+				resource: ['schedule'],
+				operation: ['createSchedule'],
+				amountOp: ['is', 'isapprox'],
+			},
+		},
+	},
+	{
+		displayName: 'Amount Lower',
+		name: 'amountLower',
+		type: 'number',
+		default: 0,
+		description: 'Lower bound of the amount range, in cents',
+		displayOptions: {
+			show: {
+				resource: ['schedule'],
+				operation: ['createSchedule'],
+				amountOp: ['isbetween'],
+			},
+		},
+	},
+	{
+		displayName: 'Amount Upper',
+		name: 'amountUpper',
+		type: 'number',
+		default: 0,
+		description: 'Upper bound of the amount range, in cents',
+		displayOptions: {
+			show: {
+				resource: ['schedule'],
+				operation: ['createSchedule'],
+				amountOp: ['isbetween'],
+			},
+		},
+	},
+	{
 		displayName: 'Date',
 		name: 'date',
 		type: 'json',
 		default: '""',
+		required: true,
 		description:
 			'A date string (YYYY-MM-DD) for a one-off schedule, or a recurring-date config object per the Actual API docs',
 		displayOptions: {
@@ -168,6 +198,23 @@ export const scheduleFields: INodeProperties[] = [
 				name: 'amount',
 				type: 'number',
 				default: 0,
+				displayOptions: {
+					show: {
+						amountOp: ['is', 'isapprox'],
+					},
+				},
+			},
+			{
+				displayName: 'Amount Lower',
+				name: 'amountLower',
+				type: 'number',
+				default: 0,
+				description: 'Lower bound of the amount range, in cents',
+				displayOptions: {
+					show: {
+						amountOp: ['isbetween'],
+					},
+				},
 			},
 			{
 				displayName: 'Amount Operator',
@@ -175,6 +222,18 @@ export const scheduleFields: INodeProperties[] = [
 				type: 'options',
 				options: amountOpOptions,
 				default: 'is',
+			},
+			{
+				displayName: 'Amount Upper',
+				name: 'amountUpper',
+				type: 'number',
+				default: 0,
+				description: 'Upper bound of the amount range, in cents',
+				displayOptions: {
+					show: {
+						amountOp: ['isbetween'],
+					},
+				},
 			},
 			{
 				displayName: 'Date',
@@ -239,6 +298,19 @@ function parseDateField(raw: unknown): unknown {
 	}
 }
 
+function isEmptyDate(date: unknown): boolean {
+	return date === null || date === undefined || date === '';
+}
+
+function resolveAmount(
+	amountOp: string,
+	amount: number,
+	amountLower: number,
+	amountUpper: number,
+): number | { num1: number; num2: number } {
+	return amountOp === 'isbetween' ? { num1: amountLower, num2: amountUpper } : amount;
+}
+
 async function handleCreateSchedule(
 	context: IExecuteFunctions,
 	itemIndex: number,
@@ -250,9 +322,17 @@ async function handleCreateSchedule(
 	const payeeId = context.getNodeParameter('payeeId', itemIndex, undefined, {
 		extractValue: true,
 	}) as string;
-	const amount = context.getNodeParameter('amount', itemIndex) as number;
 	const amountOp = context.getNodeParameter('amountOp', itemIndex) as 'is' | 'isapprox' | 'isbetween';
+	const amount = resolveAmount(
+		amountOp,
+		context.getNodeParameter('amount', itemIndex) as number,
+		context.getNodeParameter('amountLower', itemIndex) as number,
+		context.getNodeParameter('amountUpper', itemIndex) as number,
+	);
 	const date = parseDateField(context.getNodeParameter('date', itemIndex));
+	if (isEmptyDate(date)) {
+		throw new NodeOperationError(context.getNode(), '"date" must not be empty');
+	}
 	const posts_transaction = context.getNodeParameter('posts_transaction', itemIndex) as boolean;
 
 	const id = await createSchedule({
@@ -273,8 +353,30 @@ async function handleUpdateSchedule(
 ): Promise<IDataObject> {
 	const id = context.getNodeParameter('scheduleId', itemIndex) as string;
 	const fields = context.getNodeParameter('updateFields', itemIndex) as IDataObject;
+
+	// amountLower/amountUpper are UI-only helper params for the "Is Between" range value,
+	// not real APIScheduleEntity fields - fold them into "amount" and strip them before
+	// sending, same shape as createSchedule's resolveAmount().
+	const amountLower = fields.amountLower as number | undefined;
+	const amountUpper = fields.amountUpper as number | undefined;
+	delete fields.amountLower;
+	delete fields.amountUpper;
+	if (fields.amountOp === 'isbetween') {
+		if (typeof amountLower !== 'number' || typeof amountUpper !== 'number') {
+			throw new NodeOperationError(
+				context.getNode(),
+				'When "Amount Operator" is "Is Between", both "Amount Lower" and "Amount Upper" must be set',
+			);
+		}
+		fields.amount = { num1: amountLower, num2: amountUpper };
+	}
+
 	if (typeof fields.date !== 'undefined') {
-		fields.date = parseDateField(fields.date) as IDataObject['date'];
+		const parsedDate = parseDateField(fields.date);
+		if (isEmptyDate(parsedDate)) {
+			throw new NodeOperationError(context.getNode(), '"date" must not be empty');
+		}
+		fields.date = parsedDate as IDataObject['date'];
 	}
 	const resetNextDate = context.getNodeParameter('resetNextDate', itemIndex) as boolean;
 	await updateSchedule(id, fields, resetNextDate);

@@ -1201,6 +1201,22 @@ describe("ActualBudget", () => {
       expect(actualApi.updateRule).toHaveBeenCalledWith({ id: "rule-1", ...rule });
     });
 
+    it("should let the selected Rule ID win over a conflicting id in the rule JSON body", async () => {
+      const rule = { id: "rule-from-json-should-be-ignored", stage: null, conditionsOp: "and", conditions: [], actions: [] };
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateRule";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "ruleId") return "rule-1";
+        if (name === "rule") return JSON.stringify(rule);
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateRule).toHaveBeenCalledWith({ ...rule, id: "rule-1" });
+    });
+
     it("should call deleteRule with the rule ID", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "deleteRule";
@@ -1260,6 +1276,54 @@ describe("ActualBudget", () => {
       });
     });
 
+    it("should call createSchedule with a {num1, num2} amount range when Amount Operator is Is Between", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "Utilities";
+        if (name === "accountId") return "acc-1";
+        if (name === "payeeId") return "payee-1";
+        if (name === "amountOp") return "isbetween";
+        if (name === "amountLower") return -200000;
+        if (name === "amountUpper") return -100000;
+        if (name === "date") return '"2024-04-01"';
+        if (name === "posts_transaction") return true;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.createSchedule).toHaveBeenCalledWith({
+        name: "Utilities",
+        account: "acc-1",
+        payee: "payee-1",
+        amount: { num1: -200000, num2: -100000 },
+        amountOp: "isbetween",
+        date: "2024-04-01",
+        posts_transaction: true,
+      });
+    });
+
+    it("should throw when creating a schedule with an empty date", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "Rent";
+        if (name === "accountId") return "acc-1";
+        if (name === "payeeId") return "payee-1";
+        if (name === "amount") return -150000;
+        if (name === "amountOp") return "is";
+        if (name === "date") return '""';
+        if (name === "posts_transaction") return true;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"date"/);
+      expect(actualApi.createSchedule).not.toHaveBeenCalled();
+    });
+
     it("should call updateSchedule with the resolved schedule ID, fields, and resetNextDate", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "updateSchedule";
@@ -1274,6 +1338,56 @@ describe("ActualBudget", () => {
       await node.execute.call(executeFunctions);
 
       expect(actualApi.updateSchedule).toHaveBeenCalledWith("sched-1", { amount: -160000 }, true);
+    });
+
+    it("should call updateSchedule with a {num1, num2} amount range when Amount Operator is Is Between", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "scheduleId") return "sched-1";
+        if (name === "updateFields") return { amountOp: "isbetween", amountLower: -200000, amountUpper: -100000 };
+        if (name === "resetNextDate") return false;
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateSchedule).toHaveBeenCalledWith(
+        "sched-1",
+        { amountOp: "isbetween", amount: { num1: -200000, num2: -100000 } },
+        false,
+      );
+    });
+
+    it("should throw when updating with Is Between but Amount Lower/Upper are missing", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "scheduleId") return "sched-1";
+        if (name === "updateFields") return { amountOp: "isbetween" };
+        if (name === "resetNextDate") return false;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/Amount Lower.*Amount Upper/);
+      expect(actualApi.updateSchedule).not.toHaveBeenCalled();
+    });
+
+    it("should throw when updating a schedule with an empty date", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "scheduleId") return "sched-1";
+        if (name === "updateFields") return { date: '""' };
+        if (name === "resetNextDate") return false;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"date"/);
+      expect(actualApi.updateSchedule).not.toHaveBeenCalled();
     });
 
     it("should call deleteSchedule with the schedule ID", async () => {

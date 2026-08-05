@@ -154,7 +154,7 @@ async function handleUpdateRule(
 ): Promise<IDataObject> {
 	const id = context.getNodeParameter('ruleId', itemIndex) as string;
 	const rule = parseRuleJson(context, itemIndex);
-	return (await updateRule({ id, ...rule } as never)) as unknown as IDataObject;
+	return (await updateRule({ ...rule, id } as never)) as unknown as IDataObject;
 }
 
 async function handleDeleteRule(
