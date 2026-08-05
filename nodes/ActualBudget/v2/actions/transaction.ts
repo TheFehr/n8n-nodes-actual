@@ -7,6 +7,8 @@ import {
 
 import { getTransactions, importTransactions } from '@actual-app/api';
 
+import { resourceLocatorField } from '../GenericFunctions';
+
 export interface ActualTransaction {
 	date: string;
 	amount: number;
@@ -45,37 +47,19 @@ export const transactionOperation: INodeProperties = {
 };
 
 export const transactionFields: INodeProperties[] = [
-	{
+	resourceLocatorField({
 		displayName: 'Account',
-		description: 'The Account you are working on/with',
 		name: 'accountId',
-		type: 'resourceLocator',
-		default: { mode: 'list', value: '' },
+		description: 'The Account you are working on/with',
+		searchListMethod: 'searchAccounts',
+		required: true,
 		displayOptions: {
 			show: {
 				resource: ['transaction'],
 				operation: ['importTransactions', 'getTransactions'],
 			},
 		},
-		required: true,
-		modes: [
-			{
-				displayName: 'From List',
-				name: 'list',
-				type: 'list',
-				typeOptions: {
-					searchListMethod: 'searchAccounts',
-					searchable: true,
-				},
-			},
-			{
-				displayName: 'ID',
-				name: 'id',
-				type: 'string',
-				placeholder: 'e.g. 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
-			},
-		],
-	},
+	}),
 	{
 		displayName: 'Start Date',
 		name: 'startDate',
