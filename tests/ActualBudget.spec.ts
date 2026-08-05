@@ -675,8 +675,10 @@ describe("ActualBudget", () => {
       const result = await node.execute.call(executeFunctions);
 
       expect(actualApi.getAccounts).toHaveBeenCalled();
-      expect(result[0]).toHaveLength(2);
-      expect(result[0][0].json).toEqual({ id: "acc-1", name: "Checking" });
+      expect(result[0].map((item) => item.json)).toEqual([
+        { id: "acc-1", name: "Checking" },
+        { id: "acc-2", name: "Savings" },
+      ]);
     });
   });
 
@@ -710,7 +712,11 @@ describe("ActualBudget", () => {
 
       expect(actualApi.getCategoryGroups).toHaveBeenCalled();
       expect(result[0]).toHaveLength(1);
-      expect((result[0][0].json as IDataObject).name).toBe("Food");
+      expect(result[0][0].json).toEqual({
+        id: "grp-1",
+        name: "Food",
+        categories: [{ id: "cat-1", name: "Groceries" }],
+      });
     });
   });
 
