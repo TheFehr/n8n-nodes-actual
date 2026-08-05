@@ -861,6 +861,21 @@ describe("ActualBudget", () => {
       expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", { name: "Groceries & Household" });
     });
 
+    it("should call updateCategory with group_id and is_income together", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateCategory";
+        if (name === "resource") return "category";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "categoryId") return "cat-1";
+        if (name === "updateFields") return { group_id: "grp-2", is_income: true };
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", { group_id: "grp-2", is_income: true });
+    });
+
     it("should call deleteCategory with the resolved category ID and transfer category", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "deleteCategory";
