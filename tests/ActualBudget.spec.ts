@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ActualBudget } from "../nodes/ActualBudget/ActualBudget.node";
+import { ActualBudgetV2 } from "../nodes/ActualBudget/v2/ActualBudgetV2.node";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 
 vi.mock("@actual-app/api", () => ({
@@ -32,12 +32,12 @@ vi.mock("@actual-app/api", () => ({
 import * as actualApi from "@actual-app/api";
 
 describe("ActualBudget", () => {
-  let node: ActualBudget;
+  let node: ActualBudgetV2;
   let executeFunctions: IExecuteFunctions;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    node = new ActualBudget();
+    node = new ActualBudgetV2();
     executeFunctions = {
       getInputData: vi.fn().mockReturnValue([{ json: {} }]),
       getNodeParameter: vi.fn(),
@@ -60,6 +60,7 @@ describe("ActualBudget", () => {
   it("should call init with credentials", async () => {
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [{ date: "2024-01-15", amount: -1000 }];
@@ -77,6 +78,7 @@ describe("ActualBudget", () => {
   it("should call downloadBudget with the budget ID", async () => {
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "my-budget-group-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [{ date: "2024-01-15", amount: -1000 }];
@@ -88,6 +90,32 @@ describe("ActualBudget", () => {
     expect(actualApi.downloadBudget).toHaveBeenCalledWith("my-budget-group-id");
   });
 
+  it("should re-download the budget when budgetId differs between items, and skip it when unchanged", async () => {
+    const items = [
+      { budgetId: "budget-A", accountId: "account-1" },
+      { budgetId: "budget-A", accountId: "account-2" },
+      { budgetId: "budget-B", accountId: "account-3" },
+    ];
+    executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
+    executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return items[itemIndex].budgetId;
+      if (name === "accountId") return items[itemIndex].accountId;
+      if (name === "transactions") return [{ date: "2024-01-15", amount: -100 }];
+      return undefined;
+    });
+
+    await node.execute.call(executeFunctions);
+
+    // Same budgetId for items 0 and 1 -> only one download; item 2's different budgetId
+    // triggers a second one.
+    expect(actualApi.downloadBudget).toHaveBeenCalledTimes(2);
+    expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(1, "budget-A");
+    expect(actualApi.downloadBudget).toHaveBeenNthCalledWith(2, "budget-B");
+    expect(actualApi.importTransactions).toHaveBeenCalledTimes(3);
+  });
+
   it("should call importTransactions with accountId and transactions", async () => {
     const transactions = [
       { date: "2024-01-15", amount: -1000, notes: "Grocery run" },
@@ -95,6 +123,7 @@ describe("ActualBudget", () => {
     ];
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "account-abc";
       if (name === "transactions") return transactions;
@@ -110,6 +139,7 @@ describe("ActualBudget", () => {
     const transactions = [{ date: "2024-02-01", amount: -750, notes: "Parsed from string" }];
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "account-abc";
       if (name === "transactions") return JSON.stringify(transactions);
@@ -121,9 +151,52 @@ describe("ActualBudget", () => {
     expect(actualApi.importTransactions).toHaveBeenCalledWith("account-abc", transactions);
   });
 
+  it("should throw when a transaction's date is not a string", async () => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return [{ date: 20240201, amount: -750 }];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"date"/);
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
+  });
+
+  it("should throw when a transaction's amount is not a number", async () => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return [{ date: "2024-02-01", amount: "100" }];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"amount"/);
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
+  });
+
+  it("should throw when a transaction's amount is not finite (Infinity/NaN)", async () => {
+    executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+      if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
+      if (name === "budgetId") return "test-budget-id";
+      if (name === "accountId") return "account-abc";
+      if (name === "transactions") return [{ date: "2024-02-01", amount: Infinity }];
+      return undefined;
+    });
+
+    await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"amount"/);
+    expect(actualApi.importTransactions).not.toHaveBeenCalled();
+  });
+
   it("should call shutdown after successful execution", async () => {
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [];
@@ -140,6 +213,7 @@ describe("ActualBudget", () => {
     executeFunctions.continueOnFail.mockReturnValue(false);
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [];
@@ -158,6 +232,7 @@ describe("ActualBudget", () => {
     executeFunctions.continueOnFail.mockReturnValue(false);
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [];
@@ -175,6 +250,7 @@ describe("ActualBudget", () => {
     executeFunctions.continueOnFail.mockReturnValue(true);
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [];
@@ -191,6 +267,7 @@ describe("ActualBudget", () => {
     executeFunctions.getInputData.mockReturnValue([{ json: {} }, { json: {} }, { json: {} }]);
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [{ date: "2024-01-15", amount: -100 }];
@@ -210,6 +287,7 @@ describe("ActualBudget", () => {
     vi.mocked(actualApi.importTransactions).mockResolvedValueOnce(importResult as unknown);
     executeFunctions.getNodeParameter.mockImplementation((name: string) => {
       if (name === "operation") return "importTransactions";
+      if (name === "resource") return "transaction";
       if (name === "budgetId") return "test-budget-id";
       if (name === "accountId") return "test-account-id";
       if (name === "transactions") return [{ date: "2024-01-15", amount: -500 }];
@@ -225,6 +303,7 @@ describe("ActualBudget", () => {
     it("should call getTransactions with correct accountId, startDate, and endDate", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "2024-01-01";
@@ -246,6 +325,7 @@ describe("ActualBudget", () => {
       vi.mocked(actualApi.getTransactions).mockResolvedValueOnce(transactions as unknown);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "2024-01-01";
@@ -265,6 +345,7 @@ describe("ActualBudget", () => {
       vi.mocked(actualApi.getTransactions).mockResolvedValueOnce([]);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "2024-01-01";
@@ -285,6 +366,7 @@ describe("ActualBudget", () => {
       executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
       executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return items[itemIndex].accountId;
         if (name === "startDate") return items[itemIndex].startDate;
@@ -304,6 +386,7 @@ describe("ActualBudget", () => {
       executeFunctions.continueOnFail.mockReturnValue(false);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "2024-01-01";
@@ -319,6 +402,7 @@ describe("ActualBudget", () => {
     it("should throw on invalid startDate format", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "01/01/2024";
@@ -333,6 +417,7 @@ describe("ActualBudget", () => {
     it("should throw on invalid endDate format", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "2024-01-01";
@@ -347,6 +432,7 @@ describe("ActualBudget", () => {
     it("should throw when startDate is after endDate", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "2024-02-01";
@@ -362,6 +448,7 @@ describe("ActualBudget", () => {
       executeFunctions.continueOnFail.mockReturnValue(true);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getTransactions";
+        if (name === "resource") return "transaction";
         if (name === "budgetId") return "test-budget-id";
         if (name === "accountId") return "acc-abc";
         if (name === "startDate") return "01/01/2024";
@@ -380,6 +467,7 @@ describe("ActualBudget", () => {
     it("should call getBudgetMonth with the correct month parameter", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getBudgetMonth";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         return undefined;
@@ -407,6 +495,7 @@ describe("ActualBudget", () => {
       vi.mocked(actualApi.getBudgetMonth).mockResolvedValueOnce(budgetData as unknown);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getBudgetMonth";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         return undefined;
@@ -421,6 +510,7 @@ describe("ActualBudget", () => {
       executeFunctions.getInputData.mockReturnValue([{ json: {} }, { json: {} }, { json: {} }]);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getBudgetMonth";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         return undefined;
@@ -437,6 +527,7 @@ describe("ActualBudget", () => {
       executeFunctions.continueOnFail.mockReturnValue(false);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "getBudgetMonth";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         return undefined;
@@ -452,6 +543,7 @@ describe("ActualBudget", () => {
     it("should call setBudgetAmount with correct month, categoryId, and amount", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         if (name === "categoryId") return "cat-abc";
@@ -464,9 +556,25 @@ describe("ActualBudget", () => {
       expect(actualApi.setBudgetAmount).toHaveBeenCalledWith("2024-03", "cat-abc", 100000);
     });
 
+    it("should throw on a fractional (non-integer) amount", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "categoryId") return "cat-abc";
+        if (name === "amount") return 100.5;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/integer/);
+      expect(actualApi.setBudgetAmount).not.toHaveBeenCalled();
+    });
+
     it("should return echo object with written parameters", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         if (name === "categoryId") return "cat-abc";
@@ -488,6 +596,7 @@ describe("ActualBudget", () => {
       executeFunctions.getInputData.mockReturnValue(items.map(() => ({ json: {} })));
       executeFunctions.getNodeParameter.mockImplementation((name: string, itemIndex: number) => {
         if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return items[itemIndex].month;
         if (name === "categoryId") return items[itemIndex].categoryId;
@@ -508,6 +617,7 @@ describe("ActualBudget", () => {
       executeFunctions.continueOnFail.mockReturnValue(false);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         if (name === "categoryId") return "cat-abc";
@@ -525,6 +635,7 @@ describe("ActualBudget", () => {
       executeFunctions.continueOnFail.mockReturnValue(true);
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "setBudgetAmount";
+        if (name === "resource") return "budget";
         if (name === "budgetId") return "test-budget-id";
         if (name === "month") return "2024-03";
         if (name === "categoryId") return "cat-abc";
@@ -565,6 +676,7 @@ describe("ActualBudget", () => {
         getInputData: () => [{ json: {} }],
         getNodeParameter: (name: string) => {
           if (name === "operation") return "importTransactions";
+          if (name === "resource") return "transaction";
           if (name === "budgetId") return budgetId;
           if (name === "accountId") return accountId;
           if (name === "transactions") return [{ date: "2024-01-15", amount: -100 }];
@@ -605,8 +717,8 @@ describe("ActualBudget", () => {
         callOrder.push("shutdown");
       });
 
-      const nodeA = new ActualBudget();
-      const nodeB = new ActualBudget();
+      const nodeA = new ActualBudgetV2();
+      const nodeB = new ActualBudgetV2();
 
       const execA = nodeA.execute.call(makeExecuteFunctions("budget-A", "account-A"));
       // Let execution A block on its (gated) importTransactions call before starting B.
