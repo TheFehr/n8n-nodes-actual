@@ -46,11 +46,11 @@ export const transactionOperation: INodeProperties = {
 
 export const transactionFields: INodeProperties[] = [
 	{
-		displayName: 'Account ID',
-		description: 'The ID of the Account you are working on/with',
+		displayName: 'Account',
+		description: 'The Account you are working on/with',
 		name: 'accountId',
-		type: 'string',
-		default: '',
+		type: 'resourceLocator',
+		default: { mode: 'list', value: '' },
 		displayOptions: {
 			show: {
 				resource: ['transaction'],
@@ -58,6 +58,23 @@ export const transactionFields: INodeProperties[] = [
 			},
 		},
 		required: true,
+		modes: [
+			{
+				displayName: 'From List',
+				name: 'list',
+				type: 'list',
+				typeOptions: {
+					searchListMethod: 'searchAccounts',
+					searchable: true,
+				},
+			},
+			{
+				displayName: 'ID',
+				name: 'id',
+				type: 'string',
+				placeholder: 'e.g. 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
+			},
+		],
 	},
 	{
 		displayName: 'Start Date',
@@ -121,7 +138,9 @@ async function handleGetTransactions(
 	context: IExecuteFunctions,
 	itemIndex: number,
 ): Promise<IDataObject[]> {
-	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
+	const accountId = context.getNodeParameter('accountId', itemIndex, undefined, {
+		extractValue: true,
+	}) as string;
 	const startDate = context.getNodeParameter('startDate', itemIndex) as string;
 	const endDate = context.getNodeParameter('endDate', itemIndex) as string;
 	const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -141,7 +160,9 @@ async function handleImportTransactions(
 	context: IExecuteFunctions,
 	itemIndex: number,
 ): Promise<IDataObject> {
-	const accountId = context.getNodeParameter('accountId', itemIndex) as string;
+	const accountId = context.getNodeParameter('accountId', itemIndex, undefined, {
+		extractValue: true,
+	}) as string;
 	const raw = context.getNodeParameter('transactions', itemIndex);
 	let parsed: unknown;
 	if (typeof raw === 'string') {

@@ -14,13 +14,20 @@ import { init, downloadBudget, shutdown } from '@actual-app/api';
 
 import { runExclusive } from '../executionQueue';
 
-import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
-import { budgetOperation, budgetFields, executeBudget } from './actions/budget';
+import { Credentials } from './GenericFunctions';
 
-interface Credentials {
-	url: string;
-	password: string;
-}
+import { accountOperation, accountFields, executeAccount } from './actions/account';
+import { budgetOperation, budgetFields, executeBudget } from './actions/budget';
+import { categoryOperation, categoryFields, executeCategory } from './actions/category';
+import {
+	categoryGroupOperation,
+	categoryGroupFields,
+	executeCategoryGroup,
+} from './actions/categoryGroup';
+import { payeeOperation, payeeFields, executePayee } from './actions/payee';
+import { transactionOperation, transactionFields, executeTransaction } from './actions/transaction';
+
+import { searchAccounts, searchCategories, searchCategoryGroups, searchPayees } from './methods/listSearch';
 
 export class ActualBudgetV2 implements INodeType {
 	description: INodeTypeDescription = {
@@ -59,8 +66,24 @@ export class ActualBudgetV2 implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
+						name: 'Account',
+						value: 'account',
+					},
+					{
 						name: 'Budget',
 						value: 'budget',
+					},
+					{
+						name: 'Category',
+						value: 'category',
+					},
+					{
+						name: 'Category Group',
+						value: 'categoryGroup',
+					},
+					{
+						name: 'Payee',
+						value: 'payee',
 					},
 					{
 						name: 'Transaction',
@@ -70,18 +93,36 @@ export class ActualBudgetV2 implements INodeType {
 				default: 'transaction',
 				required: true,
 			},
-			transactionOperation,
+			accountOperation,
 			budgetOperation,
-			...transactionFields,
+			categoryOperation,
+			categoryGroupOperation,
+			payeeOperation,
+			transactionOperation,
+			...accountFields,
 			...budgetFields,
+			...categoryFields,
+			...categoryGroupFields,
+			...payeeFields,
+			...transactionFields,
 		],
 		usableAsTool: undefined,
+	};
+
+	methods = {
+		listSearch: {
+			searchAccounts,
+			searchCategories,
+			searchCategoryGroups,
+			searchPayees,
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		// @actual-app/api keeps its session (DB connection, sync clock) in a module-level
 		// singleton, so two executions running at once in this process would tear down or
-		// reinitialize each other's state mid-operation. Serialize executions to avoid that.
+		// reinitialize each other's state mid-operation. Serialize executions to avoid that
+		// - and V1 executions share this same queue (see ../executionQueue.ts).
 		const continueOnFail = this.continueOnFail();
 		return runExclusive(() => runActualBudget(this, continueOnFail));
 	}
@@ -92,7 +133,7 @@ async function runActualBudget(
 	continueOnFail: boolean,
 ): Promise<INodeExecutionData[][]> {
 	const items = context.getInputData();
-	const returnData = [];
+	const returnData: IDataObject[] = [];
 
 	const resource = context.getNodeParameter('resource', 0) as string;
 	const operation = context.getNodeParameter('operation', 0) as string;
@@ -148,10 +189,18 @@ async function dispatch(
 	operation: string,
 ): Promise<IDataObject | IDataObject[]> {
 	switch (resource) {
-		case 'transaction':
-			return executeTransaction(context, itemIndex, operation);
+		case 'account':
+			return executeAccount(context, itemIndex, operation);
 		case 'budget':
 			return executeBudget(context, itemIndex, operation);
+		case 'category':
+			return executeCategory(context, itemIndex, operation);
+		case 'categoryGroup':
+			return executeCategoryGroup(context, itemIndex, operation);
+		case 'payee':
+			return executePayee(context, itemIndex, operation);
+		case 'transaction':
+			return executeTransaction(context, itemIndex, operation);
 		default:
 			throw new NodeOperationError(context.getNode(), `Unknown resource "${resource}"`);
 	}

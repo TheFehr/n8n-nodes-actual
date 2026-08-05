@@ -27,6 +27,19 @@ vi.mock("@actual-app/api", () => ({
   ]),
   setBudgetAmount: vi.fn().mockResolvedValue(undefined),
   shutdown: vi.fn().mockResolvedValue(undefined),
+  getAccounts: vi.fn().mockResolvedValue([
+    { id: "acc-1", name: "Checking" },
+    { id: "acc-2", name: "Savings" },
+  ]),
+  getCategories: vi.fn().mockResolvedValue([
+    { id: "cat-1", name: "Groceries", group_id: "grp-1" },
+  ]),
+  getCategoryGroups: vi.fn().mockResolvedValue([
+    { id: "grp-1", name: "Food", categories: [{ id: "cat-1", name: "Groceries" }] },
+  ]),
+  getPayees: vi.fn().mockResolvedValue([
+    { id: "payee-1", name: "Landlord" },
+  ]),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -647,6 +660,80 @@ describe("ActualBudget", () => {
 
       expect(result).toBeDefined();
       expect(actualApi.shutdown).toHaveBeenCalled();
+    });
+  });
+
+  describe("account resource", () => {
+    it("should call getAccounts and return each account as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getAccounts";
+        if (name === "resource") return "account";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getAccounts).toHaveBeenCalled();
+      expect(result[0].map((item) => item.json)).toEqual([
+        { id: "acc-1", name: "Checking" },
+        { id: "acc-2", name: "Savings" },
+      ]);
+    });
+  });
+
+  describe("category resource", () => {
+    it("should call getCategories and return each category as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getCategories";
+        if (name === "resource") return "category";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getCategories).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+      expect(result[0][0].json).toEqual({ id: "cat-1", name: "Groceries", group_id: "grp-1" });
+    });
+  });
+
+  describe("categoryGroup resource", () => {
+    it("should call getCategoryGroups and return each group as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getCategoryGroups";
+        if (name === "resource") return "categoryGroup";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getCategoryGroups).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+      expect(result[0][0].json).toEqual({
+        id: "grp-1",
+        name: "Food",
+        categories: [{ id: "cat-1", name: "Groceries" }],
+      });
+    });
+  });
+
+  describe("payee resource", () => {
+    it("should call getPayees and return each payee as a separate output item", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "getPayees";
+        if (name === "resource") return "payee";
+        if (name === "budgetId") return "test-budget-id";
+        return undefined;
+      });
+
+      const result = await node.execute.call(executeFunctions);
+
+      expect(actualApi.getPayees).toHaveBeenCalled();
+      expect(result[0]).toHaveLength(1);
+      expect(result[0][0].json).toEqual({ id: "payee-1", name: "Landlord" });
     });
   });
 
