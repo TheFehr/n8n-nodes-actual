@@ -1305,6 +1305,26 @@ describe("ActualBudget", () => {
       });
     });
 
+    it("should throw when creating with Is Between and Amount Lower exceeds Amount Upper", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "name") return "Utilities";
+        if (name === "accountId") return "acc-1";
+        if (name === "payeeId") return "payee-1";
+        if (name === "amountOp") return "isbetween";
+        if (name === "amountLower") return -100000;
+        if (name === "amountUpper") return -200000;
+        if (name === "date") return '"2024-04-01"';
+        if (name === "posts_transaction") return true;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/Amount Lower.*Amount Upper/);
+      expect(actualApi.createSchedule).not.toHaveBeenCalled();
+    });
+
     it("should throw when creating a schedule with an empty date", async () => {
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "createSchedule";
@@ -1367,6 +1387,21 @@ describe("ActualBudget", () => {
         if (name === "budgetId") return "test-budget-id";
         if (name === "scheduleId") return "sched-1";
         if (name === "updateFields") return { amountOp: "isbetween" };
+        if (name === "resetNextDate") return false;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/Amount Lower.*Amount Upper/);
+      expect(actualApi.updateSchedule).not.toHaveBeenCalled();
+    });
+
+    it("should throw when updating with Is Between and Amount Lower exceeds Amount Upper", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateSchedule";
+        if (name === "resource") return "schedule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "scheduleId") return "sched-1";
+        if (name === "updateFields") return { amountOp: "isbetween", amountLower: -100000, amountUpper: -200000 };
         if (name === "resetNextDate") return false;
         return undefined;
       });

@@ -303,12 +303,17 @@ function isEmptyDate(date: unknown): boolean {
 }
 
 function resolveAmount(
+	context: IExecuteFunctions,
 	amountOp: string,
 	amount: number,
 	amountLower: number,
 	amountUpper: number,
 ): number | { num1: number; num2: number } {
-	return amountOp === 'isbetween' ? { num1: amountLower, num2: amountUpper } : amount;
+	if (amountOp !== 'isbetween') return amount;
+	if (amountLower > amountUpper) {
+		throw new NodeOperationError(context.getNode(), '"Amount Lower" must be less than or equal to "Amount Upper"');
+	}
+	return { num1: amountLower, num2: amountUpper };
 }
 
 async function handleCreateSchedule(
@@ -324,6 +329,7 @@ async function handleCreateSchedule(
 	}) as string;
 	const amountOp = context.getNodeParameter('amountOp', itemIndex) as 'is' | 'isapprox' | 'isbetween';
 	const amount = resolveAmount(
+		context,
 		amountOp,
 		context.getNodeParameter('amount', itemIndex) as number,
 		context.getNodeParameter('amountLower', itemIndex) as number,
@@ -367,6 +373,9 @@ async function handleUpdateSchedule(
 				context.getNode(),
 				'When "Amount Operator" is "Is Between", both "Amount Lower" and "Amount Upper" must be set',
 			);
+		}
+		if (amountLower > amountUpper) {
+			throw new NodeOperationError(context.getNode(), '"Amount Lower" must be less than or equal to "Amount Upper"');
 		}
 		fields.amount = { num1: amountLower, num2: amountUpper };
 	}
