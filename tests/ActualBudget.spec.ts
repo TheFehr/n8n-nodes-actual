@@ -1541,6 +1541,21 @@ describe("ActualBudget", () => {
 
       expect(actualApi.updateNote).toHaveBeenCalledWith("acc-1", "New note text");
     });
+
+    it("should allow clearing a note by passing an empty string", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "updateNote";
+        if (name === "resource") return "note";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "entityId") return "acc-1";
+        if (name === "note") return "";
+        return undefined;
+      });
+
+      await node.execute.call(executeFunctions);
+
+      expect(actualApi.updateNote).toHaveBeenCalledWith("acc-1", "");
+    });
   });
 
   describe("concurrent executions", () => {

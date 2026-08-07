@@ -51,7 +51,7 @@ export const noteFields: INodeProperties[] = [
 			rows: 4,
 		},
 		default: '',
-		required: true,
+		description: 'The note text. Leave empty to clear the note.',
 		displayOptions: {
 			show: {
 				resource: ['note'],
