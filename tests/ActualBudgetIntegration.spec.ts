@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { ActualBudgetV2 } from "../nodes/ActualBudget/v2/ActualBudgetV2.node";
+import { NodeApiError } from "n8n-workflow";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 import * as api from "@actual-app/api";
 import { mkdtempSync } from "fs";
@@ -507,6 +508,12 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         updateFields: { name: `${accountName} Updated` },
       });
 
+      const afterUpdateResult = await runNode({ operation: "getAccounts", resource: "account" });
+      const updatedEntry = afterUpdateResult[0].find(
+        (item) => (item.json as Record<string, unknown>).id === newAccountId,
+      );
+      expect((updatedEntry!.json as Record<string, unknown>).name).toBe(`${accountName} Updated`);
+
       // Actual requires a transfer account when closing an account with a non-zero balance
       // (this one has a $100 initial balance) — real server behavior, discovered by this test.
       await runNode({
@@ -674,6 +681,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       name: `E2E Merge Target ${Date.now()}`,
     });
     const targetPayeeId = (targetResult[0][0].json as Record<string, unknown>).id as string;
+    // Tracked outside the try so a failed merge/assertion still gets cleaned up below, rather
+    // than leaving the duplicate payee behind for the next run.
+    let dupePayeeId: string | undefined;
 
     try {
       const dupeResult = await runNode({
@@ -681,7 +691,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         resource: "payee",
         name: `E2E Merge Dupe ${Date.now()}`,
       });
-      const dupePayeeId = (dupeResult[0][0].json as Record<string, unknown>).id as string;
+      dupePayeeId = (dupeResult[0][0].json as Record<string, unknown>).id as string;
 
       await runNode({
         operation: "mergePayees",
@@ -695,31 +705,44 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       expect(ids).toContain(targetPayeeId);
       expect(ids).not.toContain(dupePayeeId);
     } finally {
+      if (dupePayeeId) {
+        const remaining = await runNode({ operation: "getPayees", resource: "payee" });
+        const dupeStillExists = remaining[0].some(
+          (item) => (item.json as Record<string, unknown>).id === dupePayeeId,
+        );
+        if (dupeStillExists) {
+          await runNode({ operation: "deletePayee", resource: "payee", payeeId: dupePayeeId });
+        }
+      }
       await runNode({ operation: "deletePayee", resource: "payee", payeeId: targetPayeeId });
     }
   }, 30000);
 
-  it("should surface a real error when the budget does not exist on the server", async () => {
+  it("should wrap a nonexistent budget as a NodeApiError with the server's detail", async () => {
     // Proves NodeApiError wrapping actually works against a genuine server error, not just
     // a mocked rejection — every unit test's "error" path uses a mock, never the real API.
-    await expect(
-      runNode({ operation: "getAccounts", resource: "account", budgetId: "nonexistent-budget-id" }),
-    ).rejects.toThrow();
+    const promise = runNode({
+      operation: "getAccounts",
+      resource: "account",
+      budgetId: "nonexistent-budget-id",
+    });
+    await expect(promise).rejects.toBeInstanceOf(NodeApiError);
+    await expect(promise).rejects.toThrow('Budget "nonexistent-budget-id" not found');
   }, 15000);
 
-  it("should surface a real AQL compiler error for a nonexistent table", async () => {
-    await expect(
-      runNode({
-        operation: "runQuery",
-        resource: "query",
-        table: "not_a_real_table",
-        filter: "{}",
-        select: '"*"',
-        groupBy: "[]",
-        orderBy: "[]",
-        rowLimit: 0,
-        offset: 0,
-      }),
-    ).rejects.toThrow();
+  it("should wrap a nonexistent AQL table as a NodeApiError with the server's detail", async () => {
+    const promise = runNode({
+      operation: "runQuery",
+      resource: "query",
+      table: "not_a_real_table",
+      filter: "{}",
+      select: '"*"',
+      groupBy: "[]",
+      orderBy: "[]",
+      rowLimit: 0,
+      offset: 0,
+    });
+    await expect(promise).rejects.toBeInstanceOf(NodeApiError);
+    await expect(promise).rejects.toThrow('Table "not_a_real_table" does not exist');
   }, 15000);
 });
