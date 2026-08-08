@@ -1,6 +1,6 @@
 /**
- * Creates (or reuses) an E2E test budget, account, and expense category on the Actual Budget server.
- * Outputs {"budgetId":"...","accountId":"...","categoryId":"..."} to stdout.
+ * Creates (or reuses) an E2E test budget, account, expense category, and payee on the Actual Budget server.
+ * Outputs {"budgetId":"...","accountId":"...","categoryId":"...","payeeId":"..."} to stdout.
  */
 import * as api from "@actual-app/api";
 import { mkdtempSync } from "fs";
@@ -57,7 +57,12 @@ if (existingCategory) {
   categoryId = await api.createCategory({ name: "E2E Test Expenses", group_id: groupId, is_income: false, hidden: false });
 }
 
+// Find or create a dedicated E2E test payee (never reuse an arbitrary existing one)
+const allPayees = await api.getPayees();
+const existingPayee = allPayees.find((p) => p.name === "E2E Test Payee");
+const payeeId = existingPayee ? existingPayee.id : await api.createPayee({ name: "E2E Test Payee" });
+
 await api.shutdown();
 
 // Write JSON on its own line so callers can reliably extract it with `tail -1`
-process.stdout.write(JSON.stringify({ budgetId, accountId, categoryId }) + "\n");
+process.stdout.write(JSON.stringify({ budgetId, accountId, categoryId, payeeId }) + "\n");

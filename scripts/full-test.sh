@@ -92,9 +92,11 @@ SETUP_OUTPUT=$(ACTUAL_TEST_URL="$ACTUAL_TEST_URL" ACTUAL_TEST_PASS="$ACTUAL_TEST
 BUDGET_ID=$(echo "$SETUP_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['budgetId'])")
 ACCOUNT_ID=$(echo "$SETUP_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['accountId'])")
 CATEGORY_ID=$(echo "$SETUP_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['categoryId'])")
+PAYEE_ID=$(echo "$SETUP_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['payeeId'])")
 echo "✓ Budget ID: $BUDGET_ID"
 echo "✓ Account ID: $ACCOUNT_ID"
 echo "✓ Category ID: $CATEGORY_ID"
+echo "✓ Payee ID: $PAYEE_ID"
 
 # Generate workflow JSON with the real budget + account IDs
 echo "Generating integration workflow..."
@@ -204,6 +206,7 @@ export ACTUAL_TEST_PASS
 export ACTUAL_TEST_BUDGET_ID="$BUDGET_ID"
 export ACTUAL_TEST_ACCOUNT_ID="$ACCOUNT_ID"
 export ACTUAL_TEST_CATEGORY_ID="$CATEGORY_ID"
+export ACTUAL_TEST_PAYEE_ID="$PAYEE_ID"
 
 set +e
 npm run test:run
