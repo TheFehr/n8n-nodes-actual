@@ -172,6 +172,6 @@ async function handleRunQuery(
 		query = query.offset(offset);
 	}
 
-	const result = await aqlQuery(query);
-	return (Array.isArray(result) ? result : (result as IDataObject)) as IDataObject | IDataObject[];
+	const { data } = (await aqlQuery(query)) as { data: IDataObject[] };
+	return data;
 }

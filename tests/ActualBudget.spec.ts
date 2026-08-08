@@ -86,7 +86,7 @@ vi.mock("@actual-app/api", () => ({
   runBankSync: vi.fn().mockResolvedValue(undefined),
   sync: vi.fn().mockResolvedValue(undefined),
   q: vi.fn(),
-  aqlQuery: vi.fn().mockResolvedValue([]),
+  aqlQuery: vi.fn().mockResolvedValue({ data: [], dependencies: [] }),
 }));
 
 import * as actualApi from "@actual-app/api";
@@ -1833,11 +1833,14 @@ describe("ActualBudget", () => {
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/invalid JSON/);
     });
 
-    it("should return each row as a separate output item when aqlQuery resolves an array", async () => {
-      vi.mocked(actualApi.aqlQuery).mockResolvedValueOnce([
-        { date: "2024-01-01", amount: -100 },
-        { date: "2024-01-02", amount: -200 },
-      ]);
+    it("should unwrap the { data, dependencies } envelope and return each row as a separate output item", async () => {
+      vi.mocked(actualApi.aqlQuery).mockResolvedValueOnce({
+        data: [
+          { date: "2024-01-01", amount: -100 },
+          { date: "2024-01-02", amount: -200 },
+        ],
+        dependencies: ["transactions"],
+      });
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "runQuery";
         if (name === "resource") return "query";
@@ -1854,7 +1857,10 @@ describe("ActualBudget", () => {
 
       const result = await node.execute.call(executeFunctions);
 
-      expect(result[0]).toHaveLength(2);
+      expect(result[0].map((item) => item.json)).toEqual([
+        { date: "2024-01-01", amount: -100 },
+        { date: "2024-01-02", amount: -200 },
+      ]);
     });
   });
 
