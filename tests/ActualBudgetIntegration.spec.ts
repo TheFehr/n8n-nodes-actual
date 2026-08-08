@@ -30,6 +30,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     return {
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => params[name],
+      getNode: () => ({ name: "ActualBudget" }),
       getCredentials: async () => ({ url: serverURL, password }),
       continueOnFail: () => false,
       helpers,
@@ -64,6 +65,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         if (name === "transactions") return JSON.stringify(transactions);
         return undefined;
       },
+      getNode: () => ({ name: "ActualBudget" }),
       getCredentials: async () => ({ url: serverURL, password }),
       continueOnFail: () => false,
       helpers: {
@@ -103,6 +105,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
             return JSON.stringify([{ date: "2024-03-02", amount, notes }]);
           return undefined;
         },
+        getNode: () => ({ name: "ActualBudget" }),
         getCredentials: async () => ({ url: serverURL, password }),
         continueOnFail: () => false,
         helpers: {
@@ -151,6 +154,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         if (name === "month") return testMonth;
         return undefined;
       },
+      getNode: () => ({ name: "ActualBudget" }),
       getCredentials: async () => ({ url: serverURL, password }),
       continueOnFail: () => false,
       helpers: {
@@ -186,6 +190,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         if (name === "amount") return 50000;
         return undefined;
       },
+      getNode: () => ({ name: "ActualBudget" }),
       getCredentials: async () => ({ url: serverURL, password }),
       continueOnFail: () => false,
       helpers: {
@@ -225,6 +230,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         if (name === "endDate") return "2024-03-31";
         return undefined;
       },
+      getNode: () => ({ name: "ActualBudget" }),
       getCredentials: async () => ({ url: serverURL, password }),
       continueOnFail: () => false,
       helpers: {
@@ -469,4 +475,251 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     const clearedNote = (clearedResult[0][0].json as Record<string, unknown>).note;
     expect(clearedNote === "" || clearedNote === null).toBe(true);
   }, 30000);
+
+  it("should create, read, update, close, reopen, and delete an account via the node", async () => {
+    const accountName = `E2E Test Account ${Date.now()}`;
+    const createResult = await runNode({
+      operation: "createAccount",
+      resource: "account",
+      name: accountName,
+      offbudget: false,
+      initialBalance: 10000,
+    });
+    const newAccountId = (createResult[0][0].json as Record<string, unknown>).id as string;
+    expect(newAccountId).toBeDefined();
+
+    try {
+      const listResult = await runNode({ operation: "getAccounts", resource: "account" });
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(newAccountId);
+
+      const balanceResult = await runNode({
+        operation: "getAccountBalance",
+        resource: "account",
+        accountId: newAccountId,
+        cutoff: "",
+      });
+      expect(typeof (balanceResult[0][0].json as Record<string, unknown>).balance).toBe("number");
+
+      await runNode({
+        operation: "updateAccount",
+        resource: "account",
+        accountId: newAccountId,
+        updateFields: { name: `${accountName} Updated` },
+      });
+
+      // Actual requires a transfer account when closing an account with a non-zero balance
+      // (this one has a $100 initial balance) — real server behavior, discovered by this test.
+      await runNode({
+        operation: "closeAccount",
+        resource: "account",
+        accountId: newAccountId,
+        transferAccountId: accountId,
+        transferCategoryId: "",
+      });
+
+      await runNode({ operation: "reopenAccount", resource: "account", accountId: newAccountId });
+    } finally {
+      await runNode({ operation: "deleteAccount", resource: "account", accountId: newAccountId });
+    }
+
+    const finalListResult = await runNode({ operation: "getAccounts", resource: "account" });
+    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(newAccountId);
+  }, 30000);
+
+  it("should create, list, update, and delete a category group via the node", async () => {
+    const groupName = `E2E Test Group ${Date.now()}`;
+    const createResult = await runNode({
+      operation: "createCategoryGroup",
+      resource: "categoryGroup",
+      name: groupName,
+      is_income: false,
+      hidden: false,
+    });
+    const groupId = (createResult[0][0].json as Record<string, unknown>).id as string;
+    expect(groupId).toBeDefined();
+
+    try {
+      const listResult = await runNode({ operation: "getCategoryGroups", resource: "categoryGroup" });
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(groupId);
+
+      await runNode({
+        operation: "updateCategoryGroup",
+        resource: "categoryGroup",
+        categoryGroupId: groupId,
+        updateFields: { name: `${groupName} Updated` },
+      });
+
+      const afterUpdateResult = await runNode({ operation: "getCategoryGroups", resource: "categoryGroup" });
+      const updatedEntry = afterUpdateResult[0].find(
+        (item) => (item.json as Record<string, unknown>).id === groupId,
+      );
+      expect((updatedEntry!.json as Record<string, unknown>).name).toBe(`${groupName} Updated`);
+    } finally {
+      await runNode({
+        operation: "deleteCategoryGroup",
+        resource: "categoryGroup",
+        categoryGroupId: groupId,
+        transferCategoryId: "",
+      });
+    }
+
+    const finalListResult = await runNode({ operation: "getCategoryGroups", resource: "categoryGroup" });
+    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(groupId);
+  }, 30000);
+
+  it("should create, list, update, and delete a category via the node", async () => {
+    // Creates its own throwaway category group, since createCategory requires one.
+    const groupCreateResult = await runNode({
+      operation: "createCategoryGroup",
+      resource: "categoryGroup",
+      name: `E2E Test Category Group ${Date.now()}`,
+      is_income: false,
+      hidden: false,
+    });
+    const groupId = (groupCreateResult[0][0].json as Record<string, unknown>).id as string;
+
+    try {
+      const categoryName = `E2E Test Category ${Date.now()}`;
+      const createResult = await runNode({
+        operation: "createCategory",
+        resource: "category",
+        name: categoryName,
+        groupId,
+        is_income: false,
+        hidden: false,
+      });
+      const newCategoryId = (createResult[0][0].json as Record<string, unknown>).id as string;
+      expect(newCategoryId).toBeDefined();
+
+      try {
+        const listResult = await runNode({ operation: "getCategories", resource: "category" });
+        expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(newCategoryId);
+
+        await runNode({
+          operation: "updateCategory",
+          resource: "category",
+          categoryId: newCategoryId,
+          updateFields: { name: `${categoryName} Updated` },
+        });
+
+        const afterUpdateResult = await runNode({ operation: "getCategories", resource: "category" });
+        const updatedEntry = afterUpdateResult[0].find(
+          (item) => (item.json as Record<string, unknown>).id === newCategoryId,
+        );
+        expect((updatedEntry!.json as Record<string, unknown>).name).toBe(`${categoryName} Updated`);
+      } finally {
+        await runNode({
+          operation: "deleteCategory",
+          resource: "category",
+          categoryId: newCategoryId,
+          transferCategoryId: "",
+        });
+      }
+
+      const finalListResult = await runNode({ operation: "getCategories", resource: "category" });
+      expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(
+        newCategoryId,
+      );
+    } finally {
+      await runNode({
+        operation: "deleteCategoryGroup",
+        resource: "categoryGroup",
+        categoryGroupId: groupId,
+        transferCategoryId: "",
+      });
+    }
+  }, 30000);
+
+  it("should create, list, update, and delete a payee via the node", async () => {
+    const payeeName = `E2E Test New Payee ${Date.now()}`;
+    const createResult = await runNode({
+      operation: "createPayee",
+      resource: "payee",
+      name: payeeName,
+    });
+    const newPayeeId = (createResult[0][0].json as Record<string, unknown>).id as string;
+    expect(newPayeeId).toBeDefined();
+
+    try {
+      const listResult = await runNode({ operation: "getPayees", resource: "payee" });
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(newPayeeId);
+
+      await runNode({
+        operation: "updatePayee",
+        resource: "payee",
+        payeeId: newPayeeId,
+        updateFields: { name: `${payeeName} Updated` },
+      });
+
+      const afterUpdateResult = await runNode({ operation: "getPayees", resource: "payee" });
+      const updatedEntry = afterUpdateResult[0].find(
+        (item) => (item.json as Record<string, unknown>).id === newPayeeId,
+      );
+      expect((updatedEntry!.json as Record<string, unknown>).name).toBe(`${payeeName} Updated`);
+
+      const commonResult = await runNode({ operation: "getCommonPayees", resource: "payee" });
+      expect(Array.isArray(commonResult[0])).toBe(true);
+    } finally {
+      await runNode({ operation: "deletePayee", resource: "payee", payeeId: newPayeeId });
+    }
+
+    const finalListResult = await runNode({ operation: "getPayees", resource: "payee" });
+    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(newPayeeId);
+  }, 30000);
+
+  it("should merge a duplicate payee into a target payee via the node", async () => {
+    const targetResult = await runNode({
+      operation: "createPayee",
+      resource: "payee",
+      name: `E2E Merge Target ${Date.now()}`,
+    });
+    const targetPayeeId = (targetResult[0][0].json as Record<string, unknown>).id as string;
+
+    try {
+      const dupeResult = await runNode({
+        operation: "createPayee",
+        resource: "payee",
+        name: `E2E Merge Dupe ${Date.now()}`,
+      });
+      const dupePayeeId = (dupeResult[0][0].json as Record<string, unknown>).id as string;
+
+      await runNode({
+        operation: "mergePayees",
+        resource: "payee",
+        targetPayeeId,
+        mergeIds: [dupePayeeId],
+      });
+
+      const listResult = await runNode({ operation: "getPayees", resource: "payee" });
+      const ids = listResult[0].map((item) => (item.json as Record<string, unknown>).id);
+      expect(ids).toContain(targetPayeeId);
+      expect(ids).not.toContain(dupePayeeId);
+    } finally {
+      await runNode({ operation: "deletePayee", resource: "payee", payeeId: targetPayeeId });
+    }
+  }, 30000);
+
+  it("should surface a real error when the budget does not exist on the server", async () => {
+    // Proves NodeApiError wrapping actually works against a genuine server error, not just
+    // a mocked rejection — every unit test's "error" path uses a mock, never the real API.
+    await expect(
+      runNode({ operation: "getAccounts", resource: "account", budgetId: "nonexistent-budget-id" }),
+    ).rejects.toThrow();
+  }, 15000);
+
+  it("should surface a real AQL compiler error for a nonexistent table", async () => {
+    await expect(
+      runNode({
+        operation: "runQuery",
+        resource: "query",
+        table: "not_a_real_table",
+        filter: "{}",
+        select: '"*"',
+        groupBy: "[]",
+        orderBy: "[]",
+        rowLimit: 0,
+        offset: 0,
+      }),
+    ).rejects.toThrow();
+  }, 15000);
 });
