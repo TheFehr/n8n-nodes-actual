@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ActualBudgetV2 } from "../nodes/ActualBudget/v2/ActualBudgetV2.node";
+import { noteFields } from "../nodes/ActualBudget/v2/actions/note";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 
 vi.mock("@actual-app/api", () => ({
@@ -1555,6 +1556,11 @@ describe("ActualBudget", () => {
       await node.execute.call(executeFunctions);
 
       expect(actualApi.updateNote).toHaveBeenCalledWith("acc-1", "");
+    });
+
+    it("note field definition should not mark 'note' as required, so empty strings pass n8n's own validation", () => {
+      const noteField = noteFields.find((field) => field.name === "note");
+      expect(noteField?.required).not.toBe(true);
     });
   });
 
