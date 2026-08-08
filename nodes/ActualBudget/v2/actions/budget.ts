@@ -183,7 +183,7 @@ export async function executeBudget(
 		case 'resetBudgetHold':
 			return handleResetBudgetHold(context, itemIndex);
 		case 'getBudgetMonths':
-			return (await getBudgetMonths()) as unknown as IDataObject[];
+			return (await getBudgetMonths()).map((month) => ({ month }));
 		case 'getBudgets':
 			return (await getBudgets()) as unknown as IDataObject[];
 		case 'sync':
@@ -243,6 +243,9 @@ async function handleHoldBudgetForNextMonth(
 ): Promise<IDataObject> {
 	const month = context.getNodeParameter('month', itemIndex) as string;
 	const amount = context.getNodeParameter('amount', itemIndex) as number;
+	if (!Number.isInteger(amount)) {
+		throw new NodeOperationError(context.getNode(), '"amount" must be an integer number of millicents');
+	}
 	const success = await holdBudgetForNextMonth(month, amount);
 	return { success, month, amount };
 }

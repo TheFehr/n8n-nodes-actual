@@ -777,7 +777,11 @@ describe("ActualBudget", () => {
       const result = await node.execute.call(executeFunctions);
 
       expect(actualApi.getBudgetMonths).toHaveBeenCalled();
-      expect(result[0]).toHaveLength(3);
+      expect(result[0].map((item) => item.json)).toEqual([
+        { month: "2024-01" },
+        { month: "2024-02" },
+        { month: "2024-03" },
+      ]);
     });
 
     it("should call getBudgets and return each budget file as a separate output item", async () => {
@@ -852,6 +856,22 @@ describe("ActualBudget", () => {
 
       expect(actualApi.holdBudgetForNextMonth).toHaveBeenCalledWith("2024-03", 20000);
       expect(result[0][0].json).toEqual({ success: true, month: "2024-03", amount: 20000 });
+    });
+
+    it("should reject a fractional amount for holdBudgetForNextMonth", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "holdBudgetForNextMonth";
+        if (name === "resource") return "budget";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "month") return "2024-03";
+        if (name === "amount") return 200.5;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        '"amount" must be an integer number of millicents',
+      );
+      expect(actualApi.holdBudgetForNextMonth).not.toHaveBeenCalled();
     });
 
     it("should call resetBudgetHold with month", async () => {
