@@ -1,6 +1,6 @@
 import { ILoadOptionsFunctions, INodeListSearchResult } from 'n8n-workflow';
 
-import { getAccounts, getCategoryGroups, getPayees } from '@actual-app/api';
+import { getAccounts, getCategoryGroups, getPayees, getTags } from '@actual-app/api';
 
 import { Credentials, withBudgetSession } from '../GenericFunctions';
 
@@ -71,5 +71,18 @@ export async function searchCategoryGroups(
 		results: groups
 			.filter((group) => matchesFilter(group.name, filter))
 			.map((group) => ({ name: group.name, value: group.id })),
+	};
+}
+
+export async function searchTags(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+): Promise<INodeListSearchResult> {
+	const { auth, budgetId } = await getAuthAndBudget(this);
+	const tags = await withBudgetSession(auth, budgetId, () => getTags());
+	return {
+		results: tags
+			.filter((tag) => matchesFilter(tag.tag, filter))
+			.map((tag) => ({ name: tag.tag, value: tag.id })),
 	};
 }

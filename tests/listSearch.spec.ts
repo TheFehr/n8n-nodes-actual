@@ -24,9 +24,13 @@ vi.mock("@actual-app/api", () => ({
     },
     { id: "grp-2", name: "Bills", categories: [{ id: "cat-3", name: "Electricity" }] },
   ]),
+  getTags: vi.fn().mockResolvedValue([
+    { id: "tag-1", tag: "#reimbursable" },
+    { id: "tag-2", tag: "#travel" },
+  ]),
 }));
 
-import { searchAccounts, searchPayees, searchCategories, searchCategoryGroups } from "../nodes/ActualBudget/v2/methods/listSearch";
+import { searchAccounts, searchPayees, searchCategories, searchCategoryGroups, searchTags } from "../nodes/ActualBudget/v2/methods/listSearch";
 
 function makeLoadOptionsContext(budgetId: string): ILoadOptionsFunctions {
   return {
@@ -72,5 +76,13 @@ describe("listSearch methods", () => {
   it("searchCategories flattens categories under their group name and filters by category name", async () => {
     const result = await searchCategories.call(makeLoadOptionsContext("budget-1"), "grocer");
     expect(result.results).toEqual([{ name: "Food / Groceries", value: "cat-1" }]);
+  });
+
+  it("searchTags returns all tags mapped to name/value", async () => {
+    const result = await searchTags.call(makeLoadOptionsContext("budget-1"));
+    expect(result.results).toEqual([
+      { name: "#reimbursable", value: "tag-1" },
+      { name: "#travel", value: "tag-2" },
+    ]);
   });
 });
