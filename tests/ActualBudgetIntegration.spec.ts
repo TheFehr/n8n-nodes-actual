@@ -304,7 +304,7 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       month: testMonth,
       amount: 1000,
     });
-    expect(typeof (holdResult[0][0].json as Record<string, unknown>).success).toBe("boolean");
+    expect((holdResult[0][0].json as Record<string, unknown>).success).toBe(false);
 
     const resetResult = await runNode({
       operation: "resetBudgetHold",
@@ -373,10 +373,14 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
   }, 30000);
 
   it("should create, list, update, and delete a schedule via the node", async () => {
+    // Actual recommends unique schedule names, and this suite reuses one long-lived budget
+    // with no afterAll cleanup for schedules — use a run-specific name and guarantee deletion
+    // even if a later assertion fails, so a failed run doesn't leave debris for the next one.
+    const scheduleName = `E2E Test Schedule ${Date.now()}`;
     const createResult = await runNode({
       operation: "createSchedule",
       resource: "schedule",
-      name: "E2E Test Schedule",
+      name: scheduleName,
       accountId,
       payeeId,
       amountOp: "isbetween",
@@ -388,24 +392,27 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     const scheduleId = (createResult[0][0].json as Record<string, unknown>).id as string;
     expect(scheduleId).toBeDefined();
 
-    const listResult = await runNode({ operation: "getSchedules", resource: "schedule" });
-    expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(scheduleId);
+    try {
+      const listResult = await runNode({ operation: "getSchedules", resource: "schedule" });
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(scheduleId);
 
-    await runNode({
-      operation: "updateSchedule",
-      resource: "schedule",
-      scheduleId,
-      updateFields: { name: "E2E Test Schedule Updated" },
-      resetNextDate: true,
-    });
+      const updatedName = `${scheduleName} Updated`;
+      await runNode({
+        operation: "updateSchedule",
+        resource: "schedule",
+        scheduleId,
+        updateFields: { name: updatedName },
+        resetNextDate: true,
+      });
 
-    const afterUpdateResult = await runNode({ operation: "getSchedules", resource: "schedule" });
-    const updatedEntry = afterUpdateResult[0].find(
-      (item) => (item.json as Record<string, unknown>).id === scheduleId,
-    );
-    expect((updatedEntry!.json as Record<string, unknown>).name).toBe("E2E Test Schedule Updated");
-
-    await runNode({ operation: "deleteSchedule", resource: "schedule", scheduleId });
+      const afterUpdateResult = await runNode({ operation: "getSchedules", resource: "schedule" });
+      const updatedEntry = afterUpdateResult[0].find(
+        (item) => (item.json as Record<string, unknown>).id === scheduleId,
+      );
+      expect((updatedEntry!.json as Record<string, unknown>).name).toBe(updatedName);
+    } finally {
+      await runNode({ operation: "deleteSchedule", resource: "schedule", scheduleId });
+    }
 
     const finalListResult = await runNode({ operation: "getSchedules", resource: "schedule" });
     expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(scheduleId);
