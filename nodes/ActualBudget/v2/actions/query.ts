@@ -127,6 +127,18 @@ function parseJsonParam(context: IExecuteFunctions, name: string, itemIndex: num
 	}
 }
 
+function parseJsonArrayParam(
+	context: IExecuteFunctions,
+	name: string,
+	itemIndex: number,
+): unknown[] {
+	const parsed = parseJsonParam(context, name, itemIndex);
+	if (!Array.isArray(parsed)) {
+		throw new NodeOperationError(context.getNode(), `"${name}" must be a JSON array`);
+	}
+	return parsed;
+}
+
 export async function executeQuery(
 	context: IExecuteFunctions,
 	itemIndex: number,
@@ -147,8 +159,8 @@ async function handleRunQuery(
 	const table = context.getNodeParameter('table', itemIndex) as string;
 	const filter = parseJsonParam(context, 'filter', itemIndex) as Record<string, unknown>;
 	const select = parseJsonParam(context, 'select', itemIndex) as string | unknown[];
-	const groupBy = parseJsonParam(context, 'groupBy', itemIndex) as unknown[];
-	const orderBy = parseJsonParam(context, 'orderBy', itemIndex) as unknown[];
+	const groupBy = parseJsonArrayParam(context, 'groupBy', itemIndex);
+	const orderBy = parseJsonArrayParam(context, 'orderBy', itemIndex);
 	const limit = context.getNodeParameter('rowLimit', itemIndex) as number;
 	const offset = context.getNodeParameter('offset', itemIndex) as number;
 
@@ -159,10 +171,10 @@ async function handleRunQuery(
 	if (Array.isArray(select) ? select.length > 0 : Boolean(select)) {
 		query = query.select(select as never);
 	}
-	if (Array.isArray(groupBy) && groupBy.length > 0) {
+	if (groupBy.length > 0) {
 		query = query.groupBy(groupBy as never);
 	}
-	if (Array.isArray(orderBy) && orderBy.length > 0) {
+	if (orderBy.length > 0) {
 		query = query.orderBy(orderBy as never);
 	}
 	if (limit > 0) {
