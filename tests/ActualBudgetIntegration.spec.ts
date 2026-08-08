@@ -14,7 +14,32 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
   const budgetId = process.env.ACTUAL_TEST_BUDGET_ID!;
   const accountId = process.env.ACTUAL_TEST_ACCOUNT_ID!;
   const categoryId = process.env.ACTUAL_TEST_CATEGORY_ID!;
+  const payeeId = process.env.ACTUAL_TEST_PAYEE_ID!;
   const testMonth = process.env.ACTUAL_TEST_MONTH ?? "2024-01";
+
+  // Shared IExecuteFunctions helpers, mirroring what n8n itself supplies at runtime.
+  const helpers = {
+    returnJsonArray: (data: unknown) =>
+      Array.isArray(data)
+        ? data.map((d) => ({ json: d as IDataObject }))
+        : [{ json: data as IDataObject }],
+    constructExecutionMetaData: (data: unknown) => data,
+  };
+
+  function makeExecuteFunctions(params: Record<string, unknown>): IExecuteFunctions {
+    return {
+      getInputData: () => [{ json: {} }],
+      getNodeParameter: (name: string) => params[name],
+      getCredentials: async () => ({ url: serverURL, password }),
+      continueOnFail: () => false,
+      helpers,
+    } as unknown as IExecuteFunctions;
+  }
+
+  async function runNode(params: Record<string, unknown>) {
+    const node = new ActualBudgetV2();
+    return node.execute.call(makeExecuteFunctions({ budgetId, ...params }));
+  }
 
   const dataDir = mkdtempSync(join(tmpdir(), "actual-integration-"));
 
@@ -219,4 +244,229 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     expect(txn).toBeDefined();
     expect((txn!.json as Record<string, unknown>).amount).toBe(-2500);
   }, 15000);
+
+  it("should run an AQL query and return unwrapped rows, not the {data, dependencies} envelope", async () => {
+    const result = await runNode({
+      operation: "runQuery",
+      resource: "query",
+      table: "transactions",
+      filter: JSON.stringify({ notes: "Integration test transaction" }),
+      select: '"*"',
+      groupBy: "[]",
+      orderBy: "[]",
+      rowLimit: 0,
+      offset: 0,
+    });
+
+    expect(result[0].length).toBeGreaterThan(0);
+    const row = result[0][0].json as Record<string, unknown>;
+    expect(row).not.toHaveProperty("dependencies");
+    expect(row.notes).toBe("Integration test transaction");
+    expect(row.amount).toBe(-2500);
+  }, 15000);
+
+  it("should get budget months including the test month, mapped to {month} objects", async () => {
+    const result = await runNode({ operation: "getBudgetMonths", resource: "budget" });
+
+    expect(result[0].length).toBeGreaterThan(0);
+    expect(result[0].map((item) => (item.json as Record<string, unknown>).month)).toContain(testMonth);
+    expect(Object.keys(result[0][0].json as object)).toEqual(["month"]);
+  }, 15000);
+
+  it("should set and persist a budget category's carryover flag", async () => {
+    const result = await runNode({
+      operation: "setBudgetCarryover",
+      resource: "budget",
+      month: testMonth,
+      categoryId,
+      carryover: true,
+    });
+    expect(result[0][0].json).toMatchObject({ success: true, carryover: true });
+
+    await api.init({ serverURL, password, dataDir });
+    await api.downloadBudget(budgetId);
+    const budgetMonth = await api.getBudgetMonth(testMonth);
+    const category = budgetMonth.categoryGroups
+      .flatMap((g) => (g as Record<string, unknown> & { categories?: Record<string, unknown>[] }).categories ?? [])
+      .find((c) => (c as Record<string, unknown>).id === categoryId);
+    expect((category as Record<string, unknown>).carryover).toBe(true);
+  }, 30000);
+
+  it("should hold for next month and return the API's real boolean result (not a hardcoded true)", async () => {
+    // holdForNextMonth only returns true when the month has a positive "to budget" surplus
+    // (see @actual-app/api's holdForNextMonth: it returns false otherwise) — our fresh E2E
+    // test month has no such surplus, so `false` here is the correct, genuine API response.
+    // The point of this assertion is that the node forwards the real value instead of
+    // hardcoding `success: true` regardless of outcome.
+    const holdResult = await runNode({
+      operation: "holdBudgetForNextMonth",
+      resource: "budget",
+      month: testMonth,
+      amount: 1000,
+    });
+    expect((holdResult[0][0].json as Record<string, unknown>).success).toBe(false);
+
+    const resetResult = await runNode({
+      operation: "resetBudgetHold",
+      resource: "budget",
+      month: testMonth,
+    });
+    expect(resetResult[0][0].json).toMatchObject({ success: true, month: testMonth });
+  }, 30000);
+
+  it("should smoke-test the remaining read-only budget operations", async () => {
+    const budgets = await runNode({ operation: "getBudgets", resource: "budget" });
+    expect(budgets[0].length).toBeGreaterThan(0);
+
+    const prefs = await runNode({ operation: "getPreferences", resource: "budget" });
+    expect(prefs[0][0].json).toBeDefined();
+
+    const version = await runNode({ operation: "getServerVersion", resource: "budget" });
+    expect(version[0][0].json).toBeDefined();
+  }, 30000);
+
+  it("should create, list, update, and delete a rule via the node", async () => {
+    const rule = {
+      stage: null,
+      conditionsOp: "and",
+      conditions: [{ field: "payee", op: "is", value: payeeId }],
+      actions: [{ field: "notes", op: "set", value: "Set by E2E rule" }],
+    };
+
+    const createResult = await runNode({
+      operation: "createRule",
+      resource: "rule",
+      rule: JSON.stringify(rule),
+    });
+    const createdRule = createResult[0][0].json as Record<string, unknown>;
+    expect(createdRule.id).toBeDefined();
+    const ruleId = createdRule.id as string;
+
+    const listResult = await runNode({ operation: "getRules", resource: "rule" });
+    expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(ruleId);
+
+    const payeeRulesResult = await runNode({
+      operation: "getPayeeRules",
+      resource: "rule",
+      payeeId,
+    });
+    expect(payeeRulesResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(ruleId);
+
+    const updatedRule = { ...rule, stage: "pre" };
+    await runNode({
+      operation: "updateRule",
+      resource: "rule",
+      ruleId,
+      rule: JSON.stringify(updatedRule),
+    });
+
+    const afterUpdateResult = await runNode({ operation: "getRules", resource: "rule" });
+    const updatedEntry = afterUpdateResult[0].find(
+      (item) => (item.json as Record<string, unknown>).id === ruleId,
+    );
+    expect((updatedEntry!.json as Record<string, unknown>).stage).toBe("pre");
+
+    await runNode({ operation: "deleteRule", resource: "rule", ruleId });
+
+    const finalListResult = await runNode({ operation: "getRules", resource: "rule" });
+    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(ruleId);
+  }, 30000);
+
+  it("should create, list, update, and delete a schedule via the node", async () => {
+    // Actual recommends unique schedule names, and this suite reuses one long-lived budget
+    // with no afterAll cleanup for schedules — use a run-specific name and guarantee deletion
+    // even if a later assertion fails, so a failed run doesn't leave debris for the next one.
+    const scheduleName = `E2E Test Schedule ${Date.now()}`;
+    const createResult = await runNode({
+      operation: "createSchedule",
+      resource: "schedule",
+      name: scheduleName,
+      accountId,
+      payeeId,
+      amountOp: "isbetween",
+      amountLower: 1000,
+      amountUpper: 2000,
+      date: JSON.stringify("2030-01-15"),
+      posts_transaction: false,
+    });
+    const scheduleId = (createResult[0][0].json as Record<string, unknown>).id as string;
+    expect(scheduleId).toBeDefined();
+
+    try {
+      const listResult = await runNode({ operation: "getSchedules", resource: "schedule" });
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(scheduleId);
+
+      const updatedName = `${scheduleName} Updated`;
+      await runNode({
+        operation: "updateSchedule",
+        resource: "schedule",
+        scheduleId,
+        updateFields: { name: updatedName },
+        resetNextDate: true,
+      });
+
+      const afterUpdateResult = await runNode({ operation: "getSchedules", resource: "schedule" });
+      const updatedEntry = afterUpdateResult[0].find(
+        (item) => (item.json as Record<string, unknown>).id === scheduleId,
+      );
+      expect((updatedEntry!.json as Record<string, unknown>).name).toBe(updatedName);
+    } finally {
+      await runNode({ operation: "deleteSchedule", resource: "schedule", scheduleId });
+    }
+
+    const finalListResult = await runNode({ operation: "getSchedules", resource: "schedule" });
+    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(scheduleId);
+  }, 30000);
+
+  it("should create, list, update, and delete a tag via the node", async () => {
+    const createResult = await runNode({
+      operation: "createTag",
+      resource: "tag",
+      tag: "#e2e-test-tag",
+      color: "#ff0000",
+      description: "E2E test tag",
+    });
+    const tagId = (createResult[0][0].json as Record<string, unknown>).id as string;
+    expect(tagId).toBeDefined();
+
+    const listResult = await runNode({ operation: "getTags", resource: "tag" });
+    expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(tagId);
+
+    await runNode({
+      operation: "updateTag",
+      resource: "tag",
+      tagId,
+      updateFields: { description: "E2E test tag updated" },
+    });
+
+    const afterUpdateResult = await runNode({ operation: "getTags", resource: "tag" });
+    const updatedEntry = afterUpdateResult[0].find(
+      (item) => (item.json as Record<string, unknown>).id === tagId,
+    );
+    expect((updatedEntry!.json as Record<string, unknown>).description).toBe("E2E test tag updated");
+
+    await runNode({ operation: "deleteTag", resource: "tag", tagId });
+
+    const finalListResult = await runNode({ operation: "getTags", resource: "tag" });
+    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(tagId);
+  }, 30000);
+
+  it("should set, get, and clear a note attached to an entity via the node", async () => {
+    const setResult = await runNode({
+      operation: "updateNote",
+      resource: "note",
+      entityId: accountId,
+      note: "E2E test note",
+    });
+    expect(setResult[0][0].json).toMatchObject({ success: true, note: "E2E test note" });
+
+    const getResult = await runNode({ operation: "getNote", resource: "note", entityId: accountId });
+    expect((getResult[0][0].json as Record<string, unknown>).note).toBe("E2E test note");
+
+    await runNode({ operation: "updateNote", resource: "note", entityId: accountId, note: "" });
+
+    const clearedResult = await runNode({ operation: "getNote", resource: "note", entityId: accountId });
+    const clearedNote = (clearedResult[0][0].json as Record<string, unknown>).note;
+    expect(clearedNote === "" || clearedNote === null).toBe(true);
+  }, 30000);
 });
