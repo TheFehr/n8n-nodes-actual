@@ -1369,6 +1369,19 @@ describe("ActualBudget", () => {
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/invalid JSON/);
     });
 
+    it("should throw when rule JSON parses to valid JSON that is not an object", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "createRule";
+        if (name === "resource") return "rule";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "rule") return "[]";
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"rule" must be a JSON object/);
+      expect(actualApi.createRule).not.toHaveBeenCalled();
+    });
+
     it("should call updateRule with the id merged into the parsed rule JSON", async () => {
       const rule = { stage: null, conditionsOp: "and", conditions: [], actions: [] };
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
@@ -1831,6 +1844,62 @@ describe("ActualBudget", () => {
       });
 
       await expect(node.execute.call(executeFunctions)).rejects.toThrow(/invalid JSON/);
+    });
+
+    it("should throw on invalid select JSON", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return "{}";
+        if (name === "select") return "not json";
+        if (name === "groupBy") return "[]";
+        if (name === "orderBy") return "[]";
+        if (name === "rowLimit") return 0;
+        if (name === "offset") return 0;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/invalid JSON/);
+    });
+
+    it("should throw when groupBy is valid JSON but not an array", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return "{}";
+        if (name === "select") return '"*"';
+        if (name === "groupBy") return '{"category": true}';
+        if (name === "orderBy") return "[]";
+        if (name === "rowLimit") return 0;
+        if (name === "offset") return 0;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"groupBy" must be a JSON array/);
+      expect(fakeQuery.groupBy).not.toHaveBeenCalled();
+    });
+
+    it("should throw when orderBy is valid JSON but not an array", async () => {
+      executeFunctions.getNodeParameter.mockImplementation((name: string) => {
+        if (name === "operation") return "runQuery";
+        if (name === "resource") return "query";
+        if (name === "budgetId") return "test-budget-id";
+        if (name === "table") return "transactions";
+        if (name === "filter") return "{}";
+        if (name === "select") return '"*"';
+        if (name === "groupBy") return "[]";
+        if (name === "orderBy") return '"date"';
+        if (name === "rowLimit") return 0;
+        if (name === "offset") return 0;
+        return undefined;
+      });
+
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"orderBy" must be a JSON array/);
+      expect(fakeQuery.orderBy).not.toHaveBeenCalled();
     });
 
     it("should unwrap the { data, dependencies } envelope and return each row as a separate output item", async () => {
