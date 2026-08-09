@@ -5,8 +5,10 @@ on:
     branches:
       - main
   schedule:
-    # Runs at 00:00 UTC every day
-    - cron: '0 0 * * *'
+    # Runs at 03:17 UTC every day. Off the hour/half-hour on purpose - GitHub
+    # Actions queues everyone's "0 0 * * *" cron jobs at once, which delays
+    # them; an odd offset avoids that pile-up.
+    - cron: '17 3 * * *'
   workflow_dispatch: # Allows manual triggering
 
 permissions:
