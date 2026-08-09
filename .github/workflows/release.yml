@@ -5,8 +5,10 @@ on:
     branches:
       - main
   schedule:
-    # Runs at 00:00 UTC every day
-    - cron: '0 0 * * *'
+    # Runs at 03:17 UTC every day. Off the hour/half-hour on purpose - GitHub
+    # Actions queues everyone's "0 0 * * *" cron jobs at once, which delays
+    # them; an odd offset avoids that pile-up.
+    - cron: '17 3 * * *'
   workflow_dispatch: # Allows manual triggering
 
 permissions:
@@ -125,8 +127,15 @@ jobs:
       # instead. Opening/merging it as the app (not the default GITHUB_TOKEN)
       # means ci.yml actually triggers on it, so the merge is a normal,
       # check-satisfying merge rather than something needing a bypass.
+      #
+      # Only ever opened from the nightly cron (or a manual dispatch), never
+      # from an ordinary push: that batches everything merged to main since
+      # the last run into a single release instead of cutting one per push.
+      # A plain push still runs this job, but only to handle the "Tag and
+      # Publish" step below (finishing a release already in flight).
       - name: Open Release PR
         if: >-
+          github.event_name != 'push' &&
           steps.check_version.outputs.IS_RELEASE_COMMIT != 'true' &&
           steps.check_version.outputs.SKIP_RELEASE != 'true'
         env:
