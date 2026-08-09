@@ -11,18 +11,12 @@
     {
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
       "automerge": true,
-      "automergeType": "pr",
-      "commitMessageSuffix": "[no-release]"
-    },
-    {
-      "matchUpdateTypes": ["major"],
-      "commitMessageSuffix": "[no-release]"
+      "automergeType": "pr"
     },
     {
       "matchManagers": ["github-actions"],
       "automerge": true,
-      "automergeType": "pr",
-      "commitMessageSuffix": "[no-release]"
+      "automergeType": "pr"
     }
   ]
 }
