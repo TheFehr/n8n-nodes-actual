@@ -32,7 +32,7 @@ E2E budgets are currently **not** supported.
 
 ## Compatibility
 
-This was developed for version 2.34.4 of n8n and version 26.8.1 of Actual.
+This was developed for version 2.34.5 of n8n and version 26.8.1 of Actual.
 
 ## Resources
 
