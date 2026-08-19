@@ -49,7 +49,13 @@ export class ActualBudgetV1 implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ActualBudget',
 		name: 'actualBudget',
-		icon: 'file:../actualbudget.svg',
+		// n8n's DirectoryLoader resolves a VersionedNodeType version's icon relative to
+		// the wrapper's own file (nodes/ActualBudget/ActualBudget.node.ts), not this
+		// file's — so this must match the wrapper's icon path exactly, not a "../" path
+		// relative to v1/ (confirmed against a real n8n install; "../actualbudget.svg"
+		// here resolves to a 404 and the node loses its icon in the UI).
+		// eslint-disable-next-line @n8n/community-nodes/icon-validation -- path is correct at runtime, see comment above
+		icon: 'file:actualbudget.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
