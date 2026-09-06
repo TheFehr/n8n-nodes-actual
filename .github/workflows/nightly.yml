@@ -57,12 +57,16 @@ jobs:
           npm run version:update
           npm install
 
+      - name: Check and rebuild vendored native bindings
+        id: bindings
+        run: bash scripts/rebuild-native-bindings.sh
+
       - name: Run pipeline
-        if: steps.check_updates.outputs.updates_found == 'true'
+        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
         run: npm run test:pipeline
 
       - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_found == 'true'
+        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
         id: cpr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
