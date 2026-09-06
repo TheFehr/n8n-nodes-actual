@@ -5,14 +5,16 @@
 # releases, so the ABI can drift (see PR #290) without any npm version bump the
 # nightly job's version:check would otherwise catch.
 #
-# Build images are pinned by digest via trusted-build-images.json (see
-# propose-trusted-image.sh / verify-node-image.sh) rather than resolved from a
-# floating tag at build time — a compromised build image would inject
-# malicious code straight into a binary this repo ships to every user of the
-# node, so only a digest a human has independently verified against upstream
-# is trusted for that role. n8nio/n8n:latest itself stays floating: it's only
-# ever used to read process.version for ABI detection below, nothing is built
-# inside it or copied out of it.
+# Builds happen inside a minimal, independently-pinned base image (alpine:X /
+# debian:X-slim, see trusted-build-images.json), with Node itself extracted
+# from the exact tarball verify-node-image.sh already proved byte-identical
+# to Node's own published release — never inside node:<major>-alpine /
+# node:<major> directly. Those images bundle their own npm/node-gyp/compiler
+# toolchain, none of which is verified anywhere in this pipeline, and it's
+# that toolchain — not just the `node` binary — that actually produces the
+# binary this repo ships to every user of the node. n8nio/n8n:latest itself
+# stays floating and is only ever used to read process.version for ABI
+# detection below; nothing is built inside it or copied out of it.
 set -eo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,8 +47,9 @@ if [ "$ENTRY" = "{}" ]; then
 	exit 0
 fi
 
-MUSL_BUILD_IMAGE=$(echo "$ENTRY" | python3 -c "import json, sys; d = json.load(sys.stdin); print(d['musl']['image'] + '@' + d['musl']['digest'])")
-GLIBC_IMAGE=$(echo "$ENTRY" | python3 -c "import json, sys; d = json.load(sys.stdin); print(d['glibc']['image'] + '@' + d['glibc']['digest'])")
+field() { echo "$ENTRY" | python3 -c "import json, sys; print(json.load(sys.stdin)$1)"; }
+
+GLIBC_DETECTION_IMAGE="$(field "['glibc']['detectionImage']")@$(field "['glibc']['detectionDigest']")"
 
 binding_loads() {
 	local image="$1" binary_dir="$2"
@@ -54,14 +57,22 @@ binding_loads() {
 		-e "require('/check/better_sqlite3.node')" >/dev/null 2>&1
 }
 
+# Compiles better-sqlite3 inside a minimal base image, using Node extracted
+# from an independently verified tarball rather than any toolchain bundled in
+# a Node-branded image.
 rebuild_binding() {
-	local build_image="$1" install_build_tools="$2" out_file="$3"
-	local work
+	local base_image="$1" install_build_tools="$2" tarball_url="$3" tarball_sha256="$4" out_file="$5"
+	local work tarball_name
 	work=$(mktemp -d)
+	tarball_name=$(basename "$tarball_url")
 	cp -r "$SRC_DIR" "$work/better-sqlite3"
-	docker run --rm -v "$work/better-sqlite3:/work" -w /work "$build_image" sh -c "
+	docker run --rm -v "$work/better-sqlite3:/work" -w /work "$base_image" sh -c "
 		set -e
 		$install_build_tools
+		curl -fsSLO '$tarball_url'
+		echo '$tarball_sha256  $tarball_name' | sha256sum -c -
+		tar -xzf '$tarball_name' --strip-components=1 -C /usr/local
+		export PATH=/usr/local/bin:\$PATH
 		npm run build-release >/dev/null
 	"
 	cp "$work/better-sqlite3/build/Release/better_sqlite3.node" "$out_file"
@@ -74,14 +85,20 @@ rebuild_binding() {
 
 if ! binding_loads "$MUSL_IMAGE" "$VENDOR_DIR/linux-x64-musl"; then
 	echo "linux-x64-musl binding is stale for Node ${NODE_MAJOR}'s ABI — rebuilding..."
-	rebuild_binding "$MUSL_BUILD_IMAGE" "apk add --no-cache python3 make g++ >/dev/null" \
+	rebuild_binding \
+		"$(field "['musl']['buildBaseImage']")@$(field "['musl']['buildBaseDigest']")" \
+		"apk add --no-cache python3 make g++ curl >/dev/null" \
+		"$(field "['musl']['nodeTarballUrl']")" "$(field "['musl']['nodeTarballSha256']")" \
 		"$VENDOR_DIR/linux-x64-musl/better_sqlite3.node"
 	CHANGED=true
 fi
 
-if ! binding_loads "$GLIBC_IMAGE" "$VENDOR_DIR/linux-x64-glibc"; then
+if ! binding_loads "$GLIBC_DETECTION_IMAGE" "$VENDOR_DIR/linux-x64-glibc"; then
 	echo "linux-x64-glibc binding is stale for Node ${NODE_MAJOR}'s ABI — rebuilding..."
-	rebuild_binding "$GLIBC_IMAGE" "apt-get update >/dev/null && apt-get install -y python3 make g++ >/dev/null" \
+	rebuild_binding \
+		"$(field "['glibc']['buildBaseImage']")@$(field "['glibc']['buildBaseDigest']")" \
+		"apt-get update >/dev/null && apt-get install -y python3 make g++ curl ca-certificates >/dev/null" \
+		"$(field "['glibc']['nodeTarballUrl']")" "$(field "['glibc']['nodeTarballSha256']")" \
 		"$VENDOR_DIR/linux-x64-glibc/better_sqlite3.node"
 	CHANGED=true
 fi

@@ -83,9 +83,10 @@ jobs:
         if: steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
-          gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}" ||
-            gh pr merge --squash "${{ steps.cpr.outputs.pull-request-number }}"
+          gh pr merge --auto --squash "$PR_NUMBER" ||
+            gh pr merge --squash "$PR_NUMBER"
 
       # n8n bundling a Node major with no vetted build image yet is the one case
       # that needs a human: this proposes the allowlist addition (with the
@@ -94,7 +95,9 @@ jobs:
       # nightly run, once a human has merged the vetted digest.
       - name: Propose newly seen Node major for vetting
         if: steps.bindings.outputs.needs_new_image_major != ''
-        run: bash scripts/propose-trusted-image.sh "${{ steps.bindings.outputs.needs_new_image_major }}"
+        env:
+          NODE_MAJOR: ${{ steps.bindings.outputs.needs_new_image_major }}
+        run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
 
       - name: Create Pull Request (new trusted build image)
         if: steps.bindings.outputs.needs_new_image_major != ''

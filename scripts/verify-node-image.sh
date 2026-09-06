@@ -17,6 +17,13 @@
 # limitation of Node's own Alpine images, not something this script can
 # strengthen beyond HTTPS transport trust in that host.
 #
+# Also prints the verified tarball's URL and checksum (node_tarball_url=,
+# node_tarball_sha256=) so propose-trusted-image.sh can record them: the
+# nightly rebuild extracts Node from this exact verified tarball itself,
+# rather than trusting whatever npm/node-gyp/node happens to be bundled
+# inside the Docker image used to run the check above — that image's own
+# toolchain is never used to produce anything this repo ships.
+#
 # Usage: verify-node-image.sh <musl|glibc> <image-ref@sha256:digest>
 set -eo pipefail
 
@@ -37,13 +44,13 @@ VERSION=$(docker run --rm --entrypoint node "$IMAGE" -e "process.stdout.write(pr
 echo "Pinned image reports Node v${VERSION}" >&2
 
 if [ "$LIBC" = "musl" ]; then
-	TARBALL="node-v${VERSION}-linux-x64-musl.tar.xz"
+	TARBALL="node-v${VERSION}-linux-x64-musl.tar.gz"
 	BASE_URL="https://unofficial-builds.nodejs.org/download/release/v${VERSION}"
 	echo "NOTE: musl builds ship from $BASE_URL, which has no GPG-signed" >&2
 	echo "checksum file — see script header for why that's an inherent limit." >&2
 	curl -fsSL -o SHASUMS256.txt "$BASE_URL/SHASUMS256.txt"
 else
-	TARBALL="node-v${VERSION}-linux-x64.tar.xz"
+	TARBALL="node-v${VERSION}-linux-x64.tar.gz"
 	BASE_URL="https://nodejs.org/dist/v${VERSION}"
 	export GNUPGHOME="$WORK/gnupg"
 	mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
@@ -72,12 +79,17 @@ else
 fi
 
 curl -fsSLO "$BASE_URL/$TARBALL"
-if ! grep " ${TARBALL}\$" SHASUMS256.txt | sha256sum -c -; then
+TARBALL_SHA256=$(grep " ${TARBALL}\$" SHASUMS256.txt | awk '{print $1}')
+if [ -z "$TARBALL_SHA256" ]; then
+	echo "FAIL: no checksum entry found for $TARBALL in SHASUMS256.txt" >&2
+	exit 1
+fi
+if ! echo "${TARBALL_SHA256}  ${TARBALL}" | sha256sum -c -; then
 	echo "FAIL: downloaded tarball does not match its published checksum" >&2
 	exit 1
 fi
 
-tar -xJf "$TARBALL" --strip-components=1 -C . "$(basename "$TARBALL" .tar.xz)/bin/node"
+tar -xzf "$TARBALL" --strip-components=1 -C . "$(basename "$TARBALL" .tar.gz)/bin/node"
 UPSTREAM_SHA=$(sha256sum bin/node | cut -d' ' -f1)
 
 CID=$(docker create "$IMAGE")
@@ -95,3 +107,5 @@ fi
 
 echo "PASS: $IMAGE's node binary is byte-identical to the verified upstream v${VERSION} ${LIBC} artifact" >&2
 echo "node_version=${VERSION}"
+echo "node_tarball_url=${BASE_URL}/${TARBALL}"
+echo "node_tarball_sha256=${TARBALL_SHA256}"

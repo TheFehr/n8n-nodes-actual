@@ -1,13 +1,19 @@
 {
   "26": {
     "glibc": {
-      "digest": "sha256:3779eb08da9114e6957b0c42a84a9471167c47e0d5fdb73ea8e8559a26789556",
-      "image": "node:26",
+      "buildBaseDigest": "sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f",
+      "buildBaseImage": "debian:trixie-slim",
+      "detectionDigest": "sha256:3779eb08da9114e6957b0c42a84a9471167c47e0d5fdb73ea8e8559a26789556",
+      "detectionImage": "node:26",
+      "nodeTarballSha256": "b2b76660fa4ded4e0b2a41ee3c0c651cd52ea8170ead91ebac1e147ac3d55643",
+      "nodeTarballUrl": "https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.gz",
       "nodeVersion": "26.8.1"
     },
     "musl": {
-      "digest": "sha256:ad6400dee476b06e82d0ee3a088e2d7555f6e6569c346e61d69e14d0f19e8c2b",
-      "image": "node:26-alpine",
+      "buildBaseDigest": "sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f",
+      "buildBaseImage": "alpine:3.24",
+      "nodeTarballSha256": "13135a6a2106f9d111fa9b48c8801ed119ad43e7e1d00de17d77a9c44899aada",
+      "nodeTarballUrl": "https://unofficial-builds.nodejs.org/download/release/v26.8.1/node-v26.8.1-linux-x64-musl.tar.gz",
       "nodeVersion": "26.8.1"
     },
     "verifiedAt": "2026-09-06"
