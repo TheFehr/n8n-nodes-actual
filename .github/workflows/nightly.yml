@@ -86,3 +86,35 @@ jobs:
         run: |
           gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}" ||
             gh pr merge --squash "${{ steps.cpr.outputs.pull-request-number }}"
+
+      # n8n bundling a Node major with no vetted build image yet is the one case
+      # that needs a human: this proposes the allowlist addition (with the
+      # verify-node-image.sh evidence baked into the PR body) but deliberately
+      # has no Enable Auto-Merge step — the rebuild itself waits for the next
+      # nightly run, once a human has merged the vetted digest.
+      - name: Propose newly seen Node major for vetting
+        if: steps.bindings.outputs.needs_new_image_major != ''
+        run: bash scripts/propose-trusted-image.sh "${{ steps.bindings.outputs.needs_new_image_major }}"
+
+      - name: Create Pull Request (new trusted build image)
+        if: steps.bindings.outputs.needs_new_image_major != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
+          title: "Vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
+          body: |
+            n8n now bundles Node ${{ steps.bindings.outputs.needs_new_image_major }}, which has no vetted
+            build image yet in `scripts/trusted-build-images.json`. No native-binding rebuild
+            happens until this is merged — the next nightly run will then proceed normally.
+
+            The added digests were independently verified against upstream by
+            `scripts/verify-node-image.sh`: the pinned image's actual `node` binary was
+            extracted and compared byte-for-byte against Node's own published release
+            artifact for that version (GPG-signature-verified for glibc; checksum-only for
+            musl, since Node's official Alpine builds have no signed checksum file — see
+            that script's header). See the job log for the full PASS/FAIL evidence.
+          branch: vet-node-${{ steps.bindings.outputs.needs_new_image_major }}
+          base: main
+          delete-branch: true
+          sign-commits: true

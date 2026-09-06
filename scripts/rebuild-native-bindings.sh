@@ -4,25 +4,49 @@
 # whichever one doesn't. n8n's base image moves independently of this repo's
 # releases, so the ABI can drift (see PR #290) without any npm version bump the
 # nightly job's version:check would otherwise catch.
+#
+# Build images are pinned by digest via trusted-build-images.json (see
+# propose-trusted-image.sh / verify-node-image.sh) rather than resolved from a
+# floating tag at build time — a compromised build image would inject
+# malicious code straight into a binary this repo ships to every user of the
+# node, so only a digest a human has independently verified against upstream
+# is trusted for that role. n8nio/n8n:latest itself stays floating: it's only
+# ever used to read process.version for ABI detection below, nothing is built
+# inside it or copied out of it.
 set -eo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR_DIR="$REPO_ROOT/vendor/better-sqlite3"
 SRC_DIR="$REPO_ROOT/node_modules/better-sqlite3"
+ALLOWLIST="$REPO_ROOT/scripts/trusted-build-images.json"
 CHANGED=false
 
-# n8nio/n8n:latest is the exact image Dockerfile.test-n8n runs against, so it's
-# ground truth for the musl target. There's no current canonical glibc-based n8n
-# image (n8nio/n8n:latest-debian on Docker Hub is a stale, unmaintained tag), so
-# the glibc target is checked/rebuilt against a plain node:<major> image matching
-# n8n's bundled Node major version instead — NODE_MODULE_VERSION is fixed per
-# Node major release regardless of OS/libc, so this is a reliable proxy.
 MUSL_IMAGE="n8nio/n8n:latest"
 NODE_MAJOR=$(docker run --rm --entrypoint node "$MUSL_IMAGE" -e "process.stdout.write(process.version.slice(1).split('.')[0])")
-GLIBC_IMAGE="node:${NODE_MAJOR}"
-MUSL_BUILD_IMAGE="node:${NODE_MAJOR}-alpine"
+echo "n8n bundles Node ${NODE_MAJOR}."
 
-echo "n8n bundles Node ${NODE_MAJOR}; checking vendored bindings against it..."
+ENTRY=$(python3 -c "
+import json
+try:
+	with open('$ALLOWLIST') as f:
+		data = json.load(f)
+except FileNotFoundError:
+	data = {}
+print(json.dumps(data.get('$NODE_MAJOR', {})))
+")
+
+if [ "$ENTRY" = "{}" ]; then
+	echo "No trusted build image is vetted yet for Node major ${NODE_MAJOR} — skipping the rebuild."
+	echo "Run scripts/propose-trusted-image.sh ${NODE_MAJOR} to vet and allowlist one."
+	if [ -n "${GITHUB_OUTPUT:-}" ]; then
+		echo "needs_new_image_major=${NODE_MAJOR}" >>"$GITHUB_OUTPUT"
+		echo "bindings_changed=false" >>"$GITHUB_OUTPUT"
+	fi
+	exit 0
+fi
+
+MUSL_BUILD_IMAGE=$(echo "$ENTRY" | python3 -c "import json, sys; d = json.load(sys.stdin); print(d['musl']['image'] + '@' + d['musl']['digest'])")
+GLIBC_IMAGE=$(echo "$ENTRY" | python3 -c "import json, sys; d = json.load(sys.stdin); print(d['glibc']['image'] + '@' + d['glibc']['digest'])")
 
 binding_loads() {
 	local image="$1" binary_dir="$2"
@@ -70,4 +94,5 @@ fi
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
 	echo "bindings_changed=$CHANGED" >>"$GITHUB_OUTPUT"
+	echo "needs_new_image_major=" >>"$GITHUB_OUTPUT"
 fi

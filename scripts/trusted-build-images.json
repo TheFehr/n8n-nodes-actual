@@ -1,0 +1,15 @@
+{
+  "26": {
+    "glibc": {
+      "digest": "sha256:3779eb08da9114e6957b0c42a84a9471167c47e0d5fdb73ea8e8559a26789556",
+      "image": "node:26",
+      "nodeVersion": "26.8.1"
+    },
+    "musl": {
+      "digest": "sha256:ad6400dee476b06e82d0ee3a088e2d7555f6e6569c346e61d69e14d0f19e8c2b",
+      "image": "node:26-alpine",
+      "nodeVersion": "26.8.1"
+    },
+    "verifiedAt": "2026-09-06"
+  }
+}
