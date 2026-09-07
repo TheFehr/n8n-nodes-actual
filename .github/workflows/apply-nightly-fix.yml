@@ -1,0 +1,148 @@
+name: Apply Nightly Fix
+
+# workflow_dispatch only, deliberately — this is the half of the nightly
+# pipeline that installs packages and compiles code inside a pinned base
+# image, from a live package repository, to produce a binary this repo
+# ships to every user of the node. That toolchain execution can't be made
+# safe by a human reviewing the resulting compiled bytes afterwards (a
+# backdoored .node file looks exactly like a clean one) — what actually
+# matters is that it never runs unattended on a public, predictable
+# schedule an attacker could plan around. See Nightly Compatibility Check
+# (nightly.yml) for the read-only detection half, which opens/updates a
+# tracking issue instead of running any of this itself.
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Tracking issue number to close on success (optional)"
+        required: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for updates
+        id: check_updates
+        run: |
+          set +e
+          npm run version:check
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "updates_found=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" -eq 2 ]; then
+            echo "updates_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version:check failed (exit $code)" && exit "$code"
+          fi
+
+      - name: Update files
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: |
+          npm run version:update
+          npm install
+
+      - name: Check and rebuild vendored native bindings
+        id: bindings
+        run: bash scripts/rebuild-native-bindings.sh
+
+      - name: Run pipeline
+        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
+        run: npm run test:pipeline
+
+      - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: nightly compatibility updates"
+          title: "Nightly Compatibility Updates"
+          body: "Manually-triggered compatibility updates."
+          branch: nightly-updates
+          base: main
+          delete-branch: true
+          sign-commits: true
+
+      - name: Enable Auto-Merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          gh pr merge --auto --squash "$PR_NUMBER" ||
+            gh pr merge --squash "$PR_NUMBER"
+
+      - name: Close tracking issue
+        if: steps.cpr.outputs.pull-request-number != '' && inputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh issue close "$ISSUE_NUMBER" --comment "Fixed via #$PR_NUMBER."
+
+      # n8n bundling a Node major with no vetted build image yet is the one
+      # case that needs a *second* manual run of this workflow: this proposes
+      # the allowlist addition (with the verify-node-image.sh evidence baked
+      # into the PR body) but deliberately has no Enable Auto-Merge step —
+      # the actual rebuild waits for that PR to be reviewed and merged, then
+      # a further manual run of this workflow.
+      - name: Propose newly seen Node major for vetting
+        if: steps.bindings.outputs.needs_new_image_major != ''
+        env:
+          NODE_MAJOR: ${{ steps.bindings.outputs.needs_new_image_major }}
+        run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
+
+      - name: Create Pull Request (new trusted build image)
+        if: steps.bindings.outputs.needs_new_image_major != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
+          title: "Vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
+          body: |
+            n8n now bundles Node ${{ steps.bindings.outputs.needs_new_image_major }}, which has no vetted
+            build image yet in `scripts/trusted-build-images.json`. No native-binding rebuild
+            happens until this is merged — re-run "Apply Nightly Fix" afterwards to pick it up.
+
+            The added digests were independently verified against upstream by
+            `scripts/verify-node-image.sh`: the pinned image's actual `node` binary was
+            extracted and compared byte-for-byte against Node's own published release
+            artifact for that version (GPG-signature-verified for glibc; checksum-only for
+            musl, since Node's official Alpine builds have no signed checksum file — see
+            that script's header). Build-tool package versions (python3/make/g++/curl) were
+            also resolved and pinned at this same commit. See the job log for the full
+            PASS/FAIL evidence.
+          branch: vet-node-${{ steps.bindings.outputs.needs_new_image_major }}
+          base: main
+          delete-branch: true
+          sign-commits: true

@@ -6,12 +6,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-and-run:
+  check:
     runs-on: ubuntu-latest
 
+    # Read-only on purpose: this job never installs a package or compiles
+    # anything, so it never needs contents/pull-requests write. The actual
+    # fix (Apply Nightly Fix) is where those live, and it only ever runs via
+    # a human manually triggering it — see scripts/check-native-bindings.sh.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      issues: write
 
     steps:
       - name: Generate Token
@@ -20,8 +24,8 @@ jobs:
         with:
           client-id: ${{ secrets.CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
+          permission-contents: read
+          permission-issues: write
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -36,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check for updates
+      - name: Check for compatibility version updates
         id: check_updates
         run: |
           set +e
@@ -51,73 +55,44 @@ jobs:
             echo "version:check failed (exit $code)" && exit "$code"
           fi
 
-      - name: Update files
-        if: steps.check_updates.outputs.updates_found == 'true'
-        run: |
-          npm run version:update
-          npm install
-
-      - name: Check and rebuild vendored native bindings
+      # Only ever runs a require() check against the already-vendored binaries
+      # inside official images — no package installation, no compilation.
+      # Safe to run unattended. See the script header for why the actual
+      # rebuild is deliberately NOT triggered from this workflow.
+      - name: Check vendored native bindings
         id: bindings
-        run: bash scripts/rebuild-native-bindings.sh
+        run: bash scripts/check-native-bindings.sh
 
-      - name: Run pipeline
-        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
-        run: npm run test:pipeline
-
-      - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
-        id: cpr
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: nightly compatibility updates"
-          title: "Nightly Compatibility Updates"
-          body: "Automated nightly updates for compatibility versions."
-          branch: nightly-updates
-          base: main
-          delete-branch: true
-          sign-commits: true
-
-      - name: Enable Auto-Merge
-        if: steps.cpr.outputs.pull-request-number != ''
+      - name: Open or update tracking issue
+        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.needs_attention == 'true'
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+          UPDATES_FOUND: ${{ steps.check_updates.outputs.updates_found }}
+          BINDING_REASONS: ${{ steps.bindings.outputs.reasons }}
         run: |
-          gh pr merge --auto --squash "$PR_NUMBER" ||
-            gh pr merge --squash "$PR_NUMBER"
+          {
+            echo "Nightly compatibility check found something that needs a human to run the fix."
+            echo
+            if [ "$UPDATES_FOUND" = "true" ]; then
+              echo "- A newer n8n / n8n-workflow / @actual-app/api compatibility version is available (\`npm run version:check\`)."
+            fi
+            if [ -n "$BINDING_REASONS" ]; then
+              echo "$BINDING_REASONS"
+            fi
+            echo
+            echo "This check never installs a package or compiles anything, and never runs the fix"
+            echo "itself — the actual rebuild does both of those from a pinned base image, so it only"
+            echo "ever runs via a human deliberately triggering it, on their own schedule an attacker"
+            echo "can't predict. When you're ready:"
+            echo
+            echo "1. Go to Actions -> \"Apply Nightly Fix\" -> \"Run workflow\"."
+            echo "2. Optionally pass this issue's number as the \`issue_number\` input so it closes automatically."
+          } >/tmp/issue-body.md
 
-      # n8n bundling a Node major with no vetted build image yet is the one case
-      # that needs a human: this proposes the allowlist addition (with the
-      # verify-node-image.sh evidence baked into the PR body) but deliberately
-      # has no Enable Auto-Merge step — the rebuild itself waits for the next
-      # nightly run, once a human has merged the vetted digest.
-      - name: Propose newly seen Node major for vetting
-        if: steps.bindings.outputs.needs_new_image_major != ''
-        env:
-          NODE_MAJOR: ${{ steps.bindings.outputs.needs_new_image_major }}
-        run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
-
-      - name: Create Pull Request (new trusted build image)
-        if: steps.bindings.outputs.needs_new_image_major != ''
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
-          title: "Vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
-          body: |
-            n8n now bundles Node ${{ steps.bindings.outputs.needs_new_image_major }}, which has no vetted
-            build image yet in `scripts/trusted-build-images.json`. No native-binding rebuild
-            happens until this is merged — the next nightly run will then proceed normally.
-
-            The added digests were independently verified against upstream by
-            `scripts/verify-node-image.sh`: the pinned image's actual `node` binary was
-            extracted and compared byte-for-byte against Node's own published release
-            artifact for that version (GPG-signature-verified for glibc; checksum-only for
-            musl, since Node's official Alpine builds have no signed checksum file — see
-            that script's header). See the job log for the full PASS/FAIL evidence.
-          branch: vet-node-${{ steps.bindings.outputs.needs_new_image_major }}
-          base: main
-          delete-branch: true
-          sign-commits: true
+          EXISTING=$(gh issue list --state open --search "\"Nightly compatibility check needs attention\" in:title" --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body-file /tmp/issue-body.md
+            echo "Updated existing issue #$EXISTING"
+          else
+            gh issue create --title "Nightly compatibility check needs attention" --body-file /tmp/issue-body.md --assignee TheFehr
+          fi
