@@ -37,14 +37,15 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install dependencies
-        run: npm ci
-
+      # No `npm ci` here — scripts/update-versions.mjs imports nothing but
+      # Node's own built-ins, and `npm ci` can run arbitrary lifecycle
+      # scripts from anything in the lockfile, which has no place in an
+      # unattended, no-install job.
       - name: Check for compatibility version updates
         id: check_updates
         run: |
           set +e
-          npm run version:check
+          node scripts/update-versions.mjs --check
           code=$?
           set -e
           if [ "$code" -eq 0 ]; then

@@ -10,8 +10,17 @@ VENDOR_DIR="$REPO_ROOT/vendor/better-sqlite3"
 ALLOWLIST="$REPO_ROOT/scripts/trusted-build-images.json"
 MUSL_IMAGE="n8nio/n8n:latest"
 
+# Reads the bundled node binary's version string without ever executing it:
+# `docker create`/`docker export` only materialize and stream the image's
+# filesystem layers, they don't run its entrypoint — unlike `docker run`,
+# which would execute whatever `node` binary this floating, unpinned tag
+# currently resolves to.
 resolve_node_major() {
-	docker run --rm --entrypoint node "$MUSL_IMAGE" -e "process.stdout.write(process.version.slice(1).split('.')[0])"
+	local cid version
+	cid=$(docker create "$MUSL_IMAGE")
+	version=$(docker export "$cid" | tar -xO usr/bin/node | strings | grep -oP '^v\K\d+\.\d+\.\d+$' | head -1)
+	docker rm "$cid" >/dev/null
+	echo "${version%%.*}"
 }
 
 # Prints the allowlist entry for a Node major as JSON, or "{}" if unvetted.

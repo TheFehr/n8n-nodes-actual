@@ -24,7 +24,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      issues: write
 
     steps:
       - name: Generate Token
@@ -35,7 +34,6 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-          permission-issues: write
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -79,6 +77,13 @@ jobs:
         if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
         run: npm run test:pipeline
 
+      # The tracking issue (if any) is closed by GitHub itself, natively, via
+      # the "Closes #N" keyword below — only once the PR actually merges, not
+      # when auto-merge is merely enabled. `gh pr merge --auto` returns as
+      # soon as auto-merge is turned on, before the PR is actually merged, so
+      # a step here that closed the issue right after would race ahead of the
+      # real outcome — closing it even if the PR later fails its checks and
+      # never merges.
       - name: Create Pull Request
         if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
         id: cpr
@@ -87,7 +92,9 @@ jobs:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           commit-message: "chore: nightly compatibility updates"
           title: "Nightly Compatibility Updates"
-          body: "Manually-triggered compatibility updates."
+          body: |
+            Manually-triggered compatibility updates.
+            ${{ inputs.issue_number != '' && format('Closes #{0}.', inputs.issue_number) || '' }}
           branch: nightly-updates
           base: main
           delete-branch: true
@@ -101,14 +108,6 @@ jobs:
         run: |
           gh pr merge --auto --squash "$PR_NUMBER" ||
             gh pr merge --squash "$PR_NUMBER"
-
-      - name: Close tracking issue
-        if: steps.cpr.outputs.pull-request-number != '' && inputs.issue_number != ''
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        run: gh issue close "$ISSUE_NUMBER" --comment "Fixed via #$PR_NUMBER."
 
       # n8n bundling a Node major with no vetted build image yet is the one
       # case that needs a *second* manual run of this workflow: this proposes
