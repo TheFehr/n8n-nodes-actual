@@ -6,12 +6,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-and-run:
+  check:
     runs-on: ubuntu-latest
 
+    # Read-only on purpose: this job never installs a package or compiles
+    # anything, so it never needs contents/pull-requests write. The actual
+    # fix (Apply Nightly Fix) is where those live, and it only ever runs via
+    # a human manually triggering it — see scripts/check-native-bindings.sh.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      issues: write
 
     steps:
       - name: Generate Token
@@ -20,8 +24,8 @@ jobs:
         with:
           client-id: ${{ secrets.CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
+          permission-contents: read
+          permission-issues: write
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -33,14 +37,21 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check for updates
+      # No `npm ci` here — scripts/update-versions.mjs imports nothing but
+      # Node's own built-ins, and `npm ci` can run arbitrary lifecycle
+      # scripts from anything in the lockfile, which has no place in an
+      # unattended, no-install job.
+      # Never exits the step on an unexpected version:check failure — doing
+      # so would skip every step after it by default (GitHub Actions' default
+      # step condition is success()), silently dropping the native-binding
+      # check and the tracking issue for the night too. Instead this records
+      # the error as an output; both checks still run and get reported, and
+      # a later step fails the job once everything has had a chance to.
+      - name: Check for compatibility version updates
         id: check_updates
         run: |
           set +e
-          npm run version:check
+          node scripts/update-versions.mjs --check
           code=$?
           set -e
           if [ "$code" -eq 0 ]; then
@@ -48,37 +59,79 @@ jobs:
           elif [ "$code" -eq 2 ]; then
             echo "updates_found=true" >> "$GITHUB_OUTPUT"
           else
-            echo "version:check failed (exit $code)" && exit "$code"
+            echo "version:check failed unexpectedly (exit $code)"
+            echo "updates_found=false" >> "$GITHUB_OUTPUT"
+            echo "check_error=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Update files
-        if: steps.check_updates.outputs.updates_found == 'true'
+      # Only ever runs a require() check against the already-vendored binaries
+      # inside official images — no package installation, no compilation.
+      # Safe to run unattended. See the script header for why the actual
+      # rebuild is deliberately NOT triggered from this workflow. Runs
+      # regardless of the previous step's outcome, so a version:check error
+      # doesn't also hide binding-drift monitoring for the night — and,
+      # same reasoning as that step, never lets an unexpected failure here
+      # (e.g. the script itself erroring before it writes needs_attention)
+      # silently skip the tracking-issue step with nothing surfaced.
+      - name: Check vendored native bindings
+        id: bindings
+        if: always()
         run: |
-          npm run version:update
-          npm install
+          set +e
+          bash scripts/check-native-bindings.sh
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "checker_error=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Run pipeline
-        if: steps.check_updates.outputs.updates_found == 'true'
-        run: npm run test:pipeline
-
-      - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_found == 'true'
-        id: cpr
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: nightly compatibility updates"
-          title: "Nightly Compatibility Updates"
-          body: "Automated nightly updates for compatibility versions."
-          branch: nightly-updates
-          base: main
-          delete-branch: true
-          sign-commits: true
-
-      - name: Enable Auto-Merge
-        if: steps.cpr.outputs.pull-request-number != ''
+      - name: Open or update tracking issue
+        if: always() && (steps.check_updates.outputs.updates_found == 'true' || steps.check_updates.outputs.check_error == 'true' || steps.bindings.outputs.needs_attention == 'true' || steps.bindings.outputs.checker_error == 'true')
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          UPDATES_FOUND: ${{ steps.check_updates.outputs.updates_found }}
+          CHECK_ERROR: ${{ steps.check_updates.outputs.check_error }}
+          BINDING_REASONS: ${{ steps.bindings.outputs.reasons }}
+          CHECKER_ERROR: ${{ steps.bindings.outputs.checker_error }}
         run: |
-          gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-number }}" ||
-            gh pr merge --squash "${{ steps.cpr.outputs.pull-request-number }}"
+          {
+            echo "Nightly compatibility check found something that needs a human to run the fix."
+            echo
+            if [ "$CHECK_ERROR" = "true" ]; then
+              echo "- \`node scripts/update-versions.mjs --check\` failed unexpectedly — see the workflow run log."
+            fi
+            if [ "$UPDATES_FOUND" = "true" ]; then
+              echo "- A newer n8n / n8n-workflow / @actual-app/api compatibility version is available (\`npm run version:check\`)."
+            fi
+            if [ -n "$BINDING_REASONS" ]; then
+              echo "$BINDING_REASONS"
+            fi
+            if [ "$CHECKER_ERROR" = "true" ]; then
+              echo "- \`scripts/check-native-bindings.sh\` failed unexpectedly — see the workflow run log."
+            fi
+            echo
+            echo "This check never installs a package or compiles anything, and never runs the fix"
+            echo "itself — the actual rebuild does both of those from a pinned base image, so it only"
+            echo "ever runs via a human deliberately triggering it, on their own schedule an attacker"
+            echo "can't predict. When you're ready:"
+            echo
+            echo "1. Go to Actions -> \"Apply Nightly Fix\" -> \"Run workflow\"."
+            echo "2. Optionally pass this issue's number as the \`issue_number\` input so it closes automatically."
+          } >/tmp/issue-body.md
+
+          # `// empty` matters: with no matching issue, `.[0].number` is jq
+          # null, which prints the literal string "null" — a non-empty bash
+          # string that [ -n ] treats as true, so without this the first-ever
+          # run (no tracking issue exists yet) would call `gh issue edit
+          # "null"` instead of creating one.
+          EXISTING=$(gh issue list --state open --search "\"Nightly compatibility check needs attention\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body-file /tmp/issue-body.md
+            echo "Updated existing issue #$EXISTING"
+          else
+            gh issue create --title "Nightly compatibility check needs attention" --body-file /tmp/issue-body.md --assignee TheFehr
+          fi
+
+      - name: Fail if a check errored
+        if: steps.check_updates.outputs.check_error == 'true' || steps.bindings.outputs.checker_error == 'true'
+        run: exit 1
