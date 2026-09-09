@@ -70,20 +70,40 @@ else
 			gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$fpr" >/dev/null 2>&1
 	done <"$FPR_FILE"
 	"${CURL[@]}" -fsSLO "$BASE_URL/SHASUMS256.txt.asc"
-	# --decrypt on a signed-only (not encrypted) message verifies the signature
-	# and emits the plaintext; the exit code alone doesn't distinguish "good
-	# signature" from "no signature at all" across gpg versions, so check the
-	# log text explicitly.
-	gpg --batch --decrypt --output SHASUMS256.txt SHASUMS256.txt.asc 2>gpg.log || {
+	# A plain "Good signature from" grep only proves *some* key in the keyring
+	# signed this — it says nothing about *which* key. That was previously
+	# only safe by assuming the keyring holds exactly the 9 keys we just
+	# imported, but --recv-keys' exact-fingerprint filtering is a relatively
+	# recent GnuPG behavior; an older gpg (or an unusual keyserver response)
+	# could import extra keys we never asked for. So --status-fd's
+	# machine-readable output is parsed instead, and the actual signing key's
+	# primary fingerprint is checked against nodejs-release-gpg-fingerprints.txt
+	# explicitly — the keyring's contents are never implicitly trusted.
+	STATUS=$(gpg --batch --status-fd 1 --decrypt --output SHASUMS256.txt SHASUMS256.txt.asc 2>gpg.log) || {
 		cat gpg.log >&2
 		exit 1
 	}
-	if ! grep -q "^gpg: Good signature from" gpg.log; then
-		echo "FAIL: SHASUMS256.txt.asc did not verify against a trusted release key" >&2
+	SIGNER_FPR=$(echo "$STATUS" | awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print $NF; exit }')
+	if [ -z "$SIGNER_FPR" ]; then
+		echo "FAIL: SHASUMS256.txt.asc produced no verifiable signature (no VALIDSIG)" >&2
 		cat gpg.log >&2
 		exit 1
 	fi
-	echo "GPG: $(grep '^gpg: Good signature from' gpg.log)" >&2
+	TRUSTED=false
+	while read -r fpr; do
+		case "$fpr" in
+		\#* | "") continue ;;
+		esac
+		if [ "$fpr" = "$SIGNER_FPR" ]; then
+			TRUSTED=true
+			break
+		fi
+	done <"$FPR_FILE"
+	if [ "$TRUSTED" != true ]; then
+		echo "FAIL: SHASUMS256.txt.asc was signed by ${SIGNER_FPR}, which is not in $(basename "$FPR_FILE")" >&2
+		exit 1
+	fi
+	echo "GPG: verified signature from trusted release key ${SIGNER_FPR}" >&2
 fi
 
 "${CURL[@]}" -fsSLO "$BASE_URL/$TARBALL"
