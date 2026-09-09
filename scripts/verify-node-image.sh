@@ -40,6 +40,14 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK"
 
+# -L follows redirects but doesn't otherwise constrain them: an HTTPS URL
+# could redirect to plain HTTP, silently dropping TLS on a connection whose
+# response we then trust (the musl checksum file isn't signed at all, so an
+# attacker able to force that downgrade could swap in a malicious tarball
+# that still passes sha256sum -c). Pin both the initial request and any
+# redirect target to HTTPS.
+CURL=(curl --proto '=https' --proto-redir '=https')
+
 VERSION=$(docker run --rm --entrypoint node "$IMAGE" -e "process.stdout.write(process.version.slice(1))")
 echo "Pinned image reports Node v${VERSION}" >&2
 
@@ -48,7 +56,7 @@ if [ "$LIBC" = "musl" ]; then
 	BASE_URL="https://unofficial-builds.nodejs.org/download/release/v${VERSION}"
 	echo "NOTE: musl builds ship from $BASE_URL, which has no GPG-signed" >&2
 	echo "checksum file — see script header for why that's an inherent limit." >&2
-	curl -fsSL -o SHASUMS256.txt "$BASE_URL/SHASUMS256.txt"
+	"${CURL[@]}" -fsSL -o SHASUMS256.txt "$BASE_URL/SHASUMS256.txt"
 else
 	TARBALL="node-v${VERSION}-linux-x64.tar.gz"
 	BASE_URL="https://nodejs.org/dist/v${VERSION}"
@@ -61,7 +69,7 @@ else
 		gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys "$fpr" >/dev/null 2>&1 ||
 			gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$fpr" >/dev/null 2>&1
 	done <"$FPR_FILE"
-	curl -fsSLO "$BASE_URL/SHASUMS256.txt.asc"
+	"${CURL[@]}" -fsSLO "$BASE_URL/SHASUMS256.txt.asc"
 	# --decrypt on a signed-only (not encrypted) message verifies the signature
 	# and emits the plaintext; the exit code alone doesn't distinguish "good
 	# signature" from "no signature at all" across gpg versions, so check the
@@ -78,7 +86,7 @@ else
 	echo "GPG: $(grep '^gpg: Good signature from' gpg.log)" >&2
 fi
 
-curl -fsSLO "$BASE_URL/$TARBALL"
+"${CURL[@]}" -fsSLO "$BASE_URL/$TARBALL"
 TARBALL_SHA256=$(grep " ${TARBALL}\$" SHASUMS256.txt | awk '{print $1}')
 if [ -z "$TARBALL_SHA256" ]; then
 	echo "FAIL: no checksum entry found for $TARBALL in SHASUMS256.txt" >&2

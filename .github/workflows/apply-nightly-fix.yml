@@ -83,7 +83,11 @@ jobs:
       # soon as auto-merge is turned on, before the PR is actually merged, so
       # a step here that closed the issue right after would race ahead of the
       # real outcome — closing it even if the PR later fails its checks and
-      # never merges.
+      # never merges. The keyword is also withheld whenever this same run
+      # also found an unvetted Node major: this PR alone wouldn't actually
+      # resolve the tracking issue in that case (the binding rebuild is still
+      # blocked on the separate vetting PR below), so closing it here would
+      # hide a still-open problem.
       - name: Create Pull Request
         if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
         id: cpr
@@ -94,7 +98,7 @@ jobs:
           title: "Nightly Compatibility Updates"
           body: |
             Manually-triggered compatibility updates.
-            ${{ inputs.issue_number != '' && format('Closes #{0}.', inputs.issue_number) || '' }}
+            ${{ inputs.issue_number != '' && steps.bindings.outputs.needs_new_image_major == '' && format('Closes #{0}.', inputs.issue_number) || '' }}
           branch: nightly-updates
           base: main
           delete-branch: true

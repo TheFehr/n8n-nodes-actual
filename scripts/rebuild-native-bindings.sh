@@ -67,7 +67,7 @@ rebuild_binding() {
 	docker run --rm -v "$work/better-sqlite3:/work" -w /work "$base_image" sh -c "
 		set -e
 		$install_build_tools
-		curl -fsSLO '$tarball_url'
+		curl --proto '=https' --proto-redir '=https' -fsSLO '$tarball_url'
 		echo '$tarball_sha256  $tarball_name' | sha256sum -c -
 		tar -xzf '$tarball_name' --strip-components=1 -C /usr/local
 		export PATH=/usr/local/bin:\$PATH
