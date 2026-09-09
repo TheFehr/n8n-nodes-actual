@@ -15,11 +15,24 @@ MUSL_IMAGE="n8nio/n8n:latest"
 # filesystem layers, they don't run its entrypoint — unlike `docker run`,
 # which would execute whatever `node` binary this floating, unpinned tag
 # currently resolves to.
+#
+# Fails loudly (nonzero return, empty stdout) rather than silently returning
+# an empty major on any failure. This matters because `set -e` in the caller
+# does NOT catch a failure inside a function invoked via command
+# substitution (verified: `x=$(f)` under `set -e`, where `f` runs `false`,
+# does not abort — bash only disables that exemption with `inherit_errexit`,
+# which isn't set here) — so every risky step below is checked explicitly,
+# and callers must check this function's own exit status too, e.g.
+# `NODE_MAJOR=$(resolve_node_major) || exit 1`.
 resolve_node_major() {
 	local cid version
-	cid=$(docker create "$MUSL_IMAGE")
+	cid=$(docker create "$MUSL_IMAGE") || return 1
 	version=$(docker export "$cid" | tar -xO usr/bin/node | strings | grep -oP '^v\K\d+\.\d+\.\d+$' | head -1)
 	docker rm "$cid" >/dev/null
+	if [ -z "$version" ]; then
+		echo "resolve_node_major: failed to read a version string from ${MUSL_IMAGE}" >&2
+		return 1
+	fi
 	echo "${version%%.*}"
 }
 

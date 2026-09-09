@@ -69,19 +69,30 @@ jobs:
       # Safe to run unattended. See the script header for why the actual
       # rebuild is deliberately NOT triggered from this workflow. Runs
       # regardless of the previous step's outcome, so a version:check error
-      # doesn't also hide binding-drift monitoring for the night.
+      # doesn't also hide binding-drift monitoring for the night — and,
+      # same reasoning as that step, never lets an unexpected failure here
+      # (e.g. the script itself erroring before it writes needs_attention)
+      # silently skip the tracking-issue step with nothing surfaced.
       - name: Check vendored native bindings
         id: bindings
         if: always()
-        run: bash scripts/check-native-bindings.sh
+        run: |
+          set +e
+          bash scripts/check-native-bindings.sh
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "checker_error=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Open or update tracking issue
-        if: always() && (steps.check_updates.outputs.updates_found == 'true' || steps.check_updates.outputs.check_error == 'true' || steps.bindings.outputs.needs_attention == 'true')
+        if: always() && (steps.check_updates.outputs.updates_found == 'true' || steps.check_updates.outputs.check_error == 'true' || steps.bindings.outputs.needs_attention == 'true' || steps.bindings.outputs.checker_error == 'true')
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           UPDATES_FOUND: ${{ steps.check_updates.outputs.updates_found }}
           CHECK_ERROR: ${{ steps.check_updates.outputs.check_error }}
           BINDING_REASONS: ${{ steps.bindings.outputs.reasons }}
+          CHECKER_ERROR: ${{ steps.bindings.outputs.checker_error }}
         run: |
           {
             echo "Nightly compatibility check found something that needs a human to run the fix."
@@ -94,6 +105,9 @@ jobs:
             fi
             if [ -n "$BINDING_REASONS" ]; then
               echo "$BINDING_REASONS"
+            fi
+            if [ "$CHECKER_ERROR" = "true" ]; then
+              echo "- \`scripts/check-native-bindings.sh\` failed unexpectedly — see the workflow run log."
             fi
             echo
             echo "This check never installs a package or compiles anything, and never runs the fix"
@@ -113,6 +127,6 @@ jobs:
             gh issue create --title "Nightly compatibility check needs attention" --body-file /tmp/issue-body.md --assignee TheFehr
           fi
 
-      - name: Fail if the version check errored
-        if: steps.check_updates.outputs.check_error == 'true'
+      - name: Fail if a check errored
+        if: steps.check_updates.outputs.check_error == 'true' || steps.bindings.outputs.checker_error == 'true'
         run: exit 1

@@ -27,7 +27,7 @@ source "$SCRIPT_DIR/lib-native-bindings.sh"
 SRC_DIR="$REPO_ROOT/node_modules/better-sqlite3"
 CHANGED=false
 
-NODE_MAJOR=$(resolve_node_major)
+NODE_MAJOR=$(resolve_node_major) || exit 1
 echo "n8n bundles Node ${NODE_MAJOR}."
 
 ENTRY=$(allowlist_entry "$NODE_MAJOR")
