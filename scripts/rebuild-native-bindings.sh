@@ -84,7 +84,25 @@ rebuild_binding() {
 	rm -rf "$work"
 }
 
-if ! binding_loads "$MUSL_IMAGE" "$VENDOR_DIR/linux-x64-musl"; then
+# binding_loads distinguishes "docker itself couldn't run the container"
+# (infra) from a genuine load failure (load) — only the latter should
+# trigger a rebuild. Blindly rebuilding on a transient infra failure could
+# open a pointless remediation PR, or mask a real config bug (e.g. a wrong
+# detectionDigest) that a rebuild wouldn't actually fix, so this fails the
+# whole script loudly instead of guessing.
+needs_rebuild() {
+	local image="$1" binary_dir="$2" kind status
+	kind=$(binding_loads "$image" "$binary_dir")
+	status=$?
+	[ "$status" -eq 0 ] && return 1
+	if [ "$kind" = infra ]; then
+		echo "FAIL: could not even run the check container against ${image} — a Docker/infrastructure failure, not an ABI problem. Refusing to rebuild blind; re-run once resolved." >&2
+		exit 1
+	fi
+	return 0
+}
+
+if needs_rebuild "$MUSL_IMAGE" "$VENDOR_DIR/linux-x64-musl"; then
 	echo "linux-x64-musl binding is stale for Node ${NODE_MAJOR}'s ABI — rebuilding..."
 	rebuild_binding \
 		"$(field "$ENTRY" "['musl']['buildBaseImage']")@$(field "$ENTRY" "['musl']['buildBaseDigest']")" \
@@ -94,7 +112,7 @@ if ! binding_loads "$MUSL_IMAGE" "$VENDOR_DIR/linux-x64-musl"; then
 	CHANGED=true
 fi
 
-if ! binding_loads "$GLIBC_DETECTION_IMAGE" "$VENDOR_DIR/linux-x64-glibc"; then
+if needs_rebuild "$GLIBC_DETECTION_IMAGE" "$VENDOR_DIR/linux-x64-glibc"; then
 	echo "linux-x64-glibc binding is stale for Node ${NODE_MAJOR}'s ABI — rebuilding..."
 	rebuild_binding \
 		"$(field "$ENTRY" "['glibc']['buildBaseImage']")@$(field "$ENTRY" "['glibc']['buildBaseDigest']")" \
