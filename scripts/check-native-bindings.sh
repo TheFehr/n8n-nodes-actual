@@ -30,12 +30,24 @@ if [ "$ENTRY" = "{}" ]; then
 else
 	GLIBC_DETECTION_IMAGE="$(field "$ENTRY" "['glibc']['detectionImage']")@$(field "$ENTRY" "['glibc']['detectionDigest']")"
 
-	if ! binding_loads "$MUSL_IMAGE" "$VENDOR_DIR/linux-x64-musl"; then
-		REASONS+=("linux-x64-musl binding no longer loads against Node ${NODE_MAJOR}'s ABI.")
-	fi
-	if ! binding_loads "$GLIBC_DETECTION_IMAGE" "$VENDOR_DIR/linux-x64-glibc"; then
-		REASONS+=("linux-x64-glibc binding no longer loads against Node ${NODE_MAJOR}'s ABI.")
-	fi
+	# binding_loads distinguishes "docker itself couldn't run the container"
+	# (pull failure, daemon error, a bad/missing allowlist field — an
+	# infrastructure problem, not an ABI one) from a genuine load failure, so
+	# the reported reason points at the actual cause rather than always
+	# blaming ABI drift and sending a human toward a rebuild that won't help.
+	report_binding_check() {
+		local label="$1" image="$2" binary_dir="$3" kind
+		kind=$(binding_loads "$image" "$binary_dir") || {
+			if [ "$kind" = infra ]; then
+				REASONS+=("Could not even run the ${label} check container against ${image} — a Docker/infrastructure failure, not necessarily an ABI problem. See the workflow run log.")
+			else
+				REASONS+=("${label} binding no longer loads against Node ${NODE_MAJOR}'s ABI.")
+			fi
+		}
+	}
+
+	report_binding_check "linux-x64-musl" "$MUSL_IMAGE" "$VENDOR_DIR/linux-x64-musl"
+	report_binding_check "linux-x64-glibc" "$GLIBC_DETECTION_IMAGE" "$VENDOR_DIR/linux-x64-glibc"
 fi
 
 if [ ${#REASONS[@]} -gt 0 ]; then

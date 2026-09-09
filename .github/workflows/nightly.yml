@@ -119,7 +119,12 @@ jobs:
             echo "2. Optionally pass this issue's number as the \`issue_number\` input so it closes automatically."
           } >/tmp/issue-body.md
 
-          EXISTING=$(gh issue list --state open --search "\"Nightly compatibility check needs attention\" in:title" --json number --jq '.[0].number')
+          # `// empty` matters: with no matching issue, `.[0].number` is jq
+          # null, which prints the literal string "null" — a non-empty bash
+          # string that [ -n ] treats as true, so without this the first-ever
+          # run (no tracking issue exists yet) would call `gh issue edit
+          # "null"` instead of creating one.
+          EXISTING=$(gh issue list --state open --search "\"Nightly compatibility check needs attention\" in:title" --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --body-file /tmp/issue-body.md
             echo "Updated existing issue #$EXISTING"

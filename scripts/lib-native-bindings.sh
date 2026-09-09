@@ -55,8 +55,23 @@ field() { python3 -c "import json, sys; print(json.load(sys.stdin)$2)" <<<"$1"; 
 # A require() check against an already-vendored binary inside an official,
 # unmodified image — no package installation, no compilation, nothing
 # untrusted executed. Safe to run unattended.
+#
+# On failure, echoes either "infra" or "load" so callers can tell Docker
+# itself failing to run the container (bad image reference, pull failure,
+# daemon error — Docker CLI's own convention: exit code 125+) apart from the
+# container running fine but require() genuinely failing to load the
+# binary. Callers that only care about pass/fail (rebuild-native-bindings.sh)
+# can ignore the output and just check the exit status, as before.
 binding_loads() {
-	local image="$1" binary_dir="$2"
+	local image="$1" binary_dir="$2" code
 	docker run --rm -v "${binary_dir}:/check:ro" --entrypoint node "$image" \
 		-e "require('/check/better_sqlite3.node')" >/dev/null 2>&1
+	code=$?
+	[ "$code" -eq 0 ] && return 0
+	if [ "$code" -ge 125 ]; then
+		echo infra
+	else
+		echo load
+	fi
+	return 1
 }

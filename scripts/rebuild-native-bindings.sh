@@ -77,7 +77,10 @@ rebuild_binding() {
 	chmod 755 "$out_file"
 	# The build container runs as root, so it leaves root-owned files behind;
 	# fix ownership before rm -rf so cleanup doesn't fail as the runner user.
-	docker run --rm -v "$work:/work" alpine chown -R "$(id -u):$(id -g)" /work >/dev/null
+	# Reuses the same already-vetted, digest-pinned base_image rather than a
+	# separate mutable `alpine` tag — this container gets $work mounted
+	# read-write, so it's no less sensitive a target than the build itself.
+	docker run --rm -v "$work:/work" "$base_image" chown -R "$(id -u):$(id -g)" /work >/dev/null
 	rm -rf "$work"
 }
 
