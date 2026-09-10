@@ -8,8 +8,9 @@ name: Apply Nightly Fix
 # (a backdoored .node file looks exactly like a clean one) — what actually
 # matters is that it never runs unattended on a public, predictable
 # schedule an attacker could plan around. See Nightly Native Binding Check
-# (nightly.yml) for the read-only detection half, which opens/updates a
-# tracking issue instead of running any of this itself.
+# (nightly-native-binding-check.yml) for the read-only detection half,
+# which opens/updates a tracking issue instead of running any of this
+# itself.
 #
 # The routine compatibility-version bump (README/package.json text edits,
 # no native compilation) is NOT gated here — it never carried this risk and
