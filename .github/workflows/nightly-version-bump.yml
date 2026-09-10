@@ -1,40 +1,37 @@
 name: Nightly Compatibility Version Bump
 
-# Fully automatic, unlike Apply Nightly Fix — this only ever edits text
-# (README.md's compatibility line, package.json's pinned versions) and runs
-# npm install plus the existing test:pipeline against the already-vetted
-# vendored bindings. It never touches rebuild-native-bindings.sh and never
-# compiles anything from a live package repository, so it doesn't carry the
-# risk that native-binding rebuilds do (see apply-nightly-fix.yml) — this is
-# exactly how the whole nightly job worked before that risk was identified
-# and split out, and nothing here changes that.
+# Two separate jobs, deliberately — not just steps. `prepare` runs npm ci
+# (executing lifecycle scripts from the locked dependencies) and
+# test:pipeline (a build); either could tamper with any tracked file. If
+# validation ran as a later *step* in that same job, a compromised script
+# could simply overwrite the validator on disk before it runs — a same-job
+# step has no privilege boundary from anything earlier in that job. A
+# separate job runs on its own disposable GitHub Actions runner: `prepare`
+# has no write credentials at all and can only ever compromise its own
+# throwaway VM; `commit` does a completely fresh checkout — its own copy of
+# validate-version-bump-diff.mjs, pulled straight from git, that `prepare`'s
+# runner never touched and structurally cannot touch — downloads *only* the
+# three files prepare produced as a build artifact, validates them there,
+# and only then generates write credentials to commit and auto-merge.
 on:
   schedule:
     - cron: "34 1 * * *"
   workflow_dispatch:
 
 jobs:
-  bump:
+  prepare:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+
+    outputs:
+      updates_found: ${{ steps.check_updates.outputs.updates_found }}
 
     steps:
-      - name: Generate Token
-        id: generate_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
-        with:
-          client-id: ${{ secrets.CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Use Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -69,21 +66,54 @@ jobs:
         if: steps.check_updates.outputs.updates_found == 'true'
         run: npm run test:pipeline
 
-      # npm ci above executes lifecycle scripts from the locked dependencies,
-      # in the same job that (below) commits and auto-merges whatever's dirty
-      # in the working tree with no human review. A compromised script (or
-      # the build step in test:pipeline) could tamper with any tracked file,
-      # and create-pull-request would ship that tampering right along with
-      # the legitimate version bump. This doesn't try to prevent that at the
-      # source — it validates the *result* against the exact, known shape of
-      # a real version bump (see the script) and fails loudly on anything
-      # else, whatever its origin.
-      - name: Validate the diff matches a real version bump
+      - name: Upload updated files
         if: steps.check_updates.outputs.updates_found == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: version-bump-files
+          path: |
+            README.md
+            package.json
+            package-lock.json
+          retention-days: 1
+
+  commit:
+    needs: prepare
+    if: needs.prepare.outputs.updates_found == 'true'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # A fresh checkout — untouched by prepare's runner, which no longer
+      # even exists by the time this job starts. This job's own copy of
+      # validate-version-bump-diff.mjs cannot have been tampered with by
+      # anything prepare's npm ci or test:pipeline executed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Download updated files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: version-bump-files
+
+      - name: Validate the diff matches a real version bump
         run: node scripts/validate-version-bump-diff.mjs
 
       - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_found == 'true'
         id: cpr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
