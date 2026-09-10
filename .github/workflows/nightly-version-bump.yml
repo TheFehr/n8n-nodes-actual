@@ -1,0 +1,93 @@
+name: Nightly Compatibility Version Bump
+
+# Fully automatic, unlike Apply Nightly Fix — this only ever edits text
+# (README.md's compatibility line, package.json's pinned versions) and runs
+# npm install plus the existing test:pipeline against the already-vetted
+# vendored bindings. It never touches rebuild-native-bindings.sh and never
+# compiles anything from a live package repository, so it doesn't carry the
+# risk that native-binding rebuilds do (see apply-nightly-fix.yml) — this is
+# exactly how the whole nightly job worked before that risk was identified
+# and split out, and nothing here changes that.
+on:
+  schedule:
+    - cron: "34 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for updates
+        id: check_updates
+        run: |
+          set +e
+          npm run version:check
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "updates_found=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" -eq 2 ]; then
+            echo "updates_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version:check failed (exit $code)" && exit "$code"
+          fi
+
+      - name: Update files
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: |
+          npm run version:update
+          npm install
+
+      - name: Run pipeline
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: npm run test:pipeline
+
+      - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_found == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: nightly compatibility updates"
+          title: "Nightly Compatibility Updates"
+          body: "Automated nightly updates for compatibility versions."
+          branch: nightly-updates
+          base: main
+          delete-branch: true
+          sign-commits: true
+
+      - name: Enable Auto-Merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          gh pr merge --auto --squash "$PR_NUMBER" ||
+            gh pr merge --squash "$PR_NUMBER"

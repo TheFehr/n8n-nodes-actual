@@ -1,15 +1,20 @@
 name: Apply Nightly Fix
 
-# workflow_dispatch only, deliberately — this is the half of the nightly
-# pipeline that installs packages and compiles code inside a pinned base
-# image, from a live package repository, to produce a binary this repo
-# ships to every user of the node. That toolchain execution can't be made
-# safe by a human reviewing the resulting compiled bytes afterwards (a
-# backdoored .node file looks exactly like a clean one) — what actually
+# workflow_dispatch only, deliberately — this is specifically the native-
+# binding rebuild, which installs packages and compiles code inside a
+# pinned base image, from a live package repository, to produce a binary
+# this repo ships to every user of the node. That toolchain execution can't
+# be made safe by a human reviewing the resulting compiled bytes afterwards
+# (a backdoored .node file looks exactly like a clean one) — what actually
 # matters is that it never runs unattended on a public, predictable
-# schedule an attacker could plan around. See Nightly Compatibility Check
+# schedule an attacker could plan around. See Nightly Native Binding Check
 # (nightly.yml) for the read-only detection half, which opens/updates a
 # tracking issue instead of running any of this itself.
+#
+# The routine compatibility-version bump (README/package.json text edits,
+# no native compilation) is NOT gated here — it never carried this risk and
+# ran fully automatically long before this workflow existed; see
+# nightly-version-bump.yml, which still does.
 on:
   workflow_dispatch:
     inputs:
@@ -48,33 +53,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check for updates
-        id: check_updates
-        run: |
-          set +e
-          npm run version:check
-          code=$?
-          set -e
-          if [ "$code" -eq 0 ]; then
-            echo "updates_found=false" >> "$GITHUB_OUTPUT"
-          elif [ "$code" -eq 2 ]; then
-            echo "updates_found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "version:check failed (exit $code)" && exit "$code"
-          fi
-
-      - name: Update files
-        if: steps.check_updates.outputs.updates_found == 'true'
-        run: |
-          npm run version:update
-          npm install
-
       - name: Check and rebuild vendored native bindings
         id: bindings
         run: bash scripts/rebuild-native-bindings.sh
 
       - name: Run pipeline
-        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
+        if: steps.bindings.outputs.bindings_changed == 'true'
         run: npm run test:pipeline
 
       # The tracking issue (if any) is closed by GitHub itself, natively, via
@@ -83,23 +67,19 @@ jobs:
       # soon as auto-merge is turned on, before the PR is actually merged, so
       # a step here that closed the issue right after would race ahead of the
       # real outcome — closing it even if the PR later fails its checks and
-      # never merges. The keyword is also withheld whenever this same run
-      # also found an unvetted Node major: this PR alone wouldn't actually
-      # resolve the tracking issue in that case (the binding rebuild is still
-      # blocked on the separate vetting PR below), so closing it here would
-      # hide a still-open problem.
+      # never merges.
       - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
+        if: steps.bindings.outputs.bindings_changed == 'true'
         id: cpr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: nightly compatibility updates"
-          title: "Nightly Compatibility Updates"
+          commit-message: "chore: rebuild vendored native bindings"
+          title: "Rebuild vendored native bindings"
           body: |
-            Manually-triggered compatibility updates.
-            ${{ inputs.issue_number != '' && steps.bindings.outputs.needs_new_image_major == '' && format('Closes #{0}.', inputs.issue_number) || '' }}
-          branch: nightly-updates
+            Manually-triggered native binding rebuild.
+            ${{ inputs.issue_number != '' && format('Closes #{0}.', inputs.issue_number) || '' }}
+          branch: nightly-binding-rebuild
           base: main
           delete-branch: true
           sign-commits: true
