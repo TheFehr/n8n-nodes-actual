@@ -69,6 +69,19 @@ jobs:
         if: steps.check_updates.outputs.updates_found == 'true'
         run: npm run test:pipeline
 
+      # npm ci above executes lifecycle scripts from the locked dependencies,
+      # in the same job that (below) commits and auto-merges whatever's dirty
+      # in the working tree with no human review. A compromised script (or
+      # the build step in test:pipeline) could tamper with any tracked file,
+      # and create-pull-request would ship that tampering right along with
+      # the legitimate version bump. This doesn't try to prevent that at the
+      # source — it validates the *result* against the exact, known shape of
+      # a real version bump (see the script) and fails loudly on anything
+      # else, whatever its origin.
+      - name: Validate the diff matches a real version bump
+        if: steps.check_updates.outputs.updates_found == 'true'
+        run: node scripts/validate-version-bump-diff.mjs
+
       - name: Create Pull Request
         if: steps.check_updates.outputs.updates_found == 'true'
         id: cpr
@@ -78,6 +91,12 @@ jobs:
           commit-message: "chore: nightly compatibility updates"
           title: "Nightly Compatibility Updates"
           body: "Automated nightly updates for compatibility versions."
+          # Defense in depth alongside the validation step above: even if
+          # that had a bug, only these exact paths can ever be committed.
+          add-paths: |
+            README.md
+            package.json
+            package-lock.json
           branch: nightly-updates
           base: main
           delete-branch: true
