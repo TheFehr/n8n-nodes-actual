@@ -17,20 +17,31 @@ name: Apply Nightly Fix
 # ran fully automatically long before this workflow existed; see
 # nightly-version-bump.yml, which still does.
 #
-# Two separate jobs, deliberately — same reasoning as
-# nightly-version-bump.yml. `rebuild` runs npm ci (executing lifecycle
-# scripts from the locked dependencies) and the actual native-toolchain
-# compile; either could tamper with any tracked file. If it also held write
-# credentials, a compromised script could exfiltrate them or have
-# create-pull-request commit its own tampering alongside the legitimate
-# rebuild. So `rebuild` has no write credentials at all — `contents: read`
-# only — and can only ever compromise its own throwaway VM. It uploads only
-# the exact vendored binding files (or, on the "unvetted Node major" path,
-# only the proposed allowlist entry) as build artifacts. `commit`/`propose`
-# do a completely fresh checkout, generate write credentials only after
-# that checkout, download *only* those specific artifact files, and apply
-# them with an explicit `add-paths` allowlist — never "whatever's dirty in
-# the working tree".
+# Four jobs, deliberately, along two independent chains — same reasoning as
+# nightly-version-bump.yml, applied twice over:
+#
+# - `rebuild` runs npm ci (executing lifecycle scripts from the locked
+#   dependencies) and the actual native-toolchain compile; either could
+#   tamper with any tracked file. It has no write credentials at all —
+#   `contents: read` only — and can only ever compromise its own throwaway
+#   VM. It uploads only the exact vendored binding files as a build
+#   artifact. `commit` does a completely fresh checkout, generates write
+#   credentials only after that checkout, downloads *only* that artifact,
+#   and applies it with an explicit `add-paths` allowlist — never "whatever
+#   changed in the working tree".
+# - `propose-image` (the "unvetted Node major" path) deliberately never
+#   runs npm ci at all — propose-trusted-image.sh needs nothing it
+#   produces — precisely so a compromised lifecycle script in `rebuild`'s
+#   throwaway VM can never be in a position to tamper with this script or
+#   its output before `propose` picks it up. `propose` again does a fresh
+#   checkout, generates write credentials only afterward, and applies only
+#   the downloaded artifact via `add-paths`.
+#
+# Every checkout below is pinned to `ref: main`: this workflow only ever
+# repairs main's current tip, regardless of which branch/tag a manual
+# workflow_dispatch run happens to be invoked from — otherwise a dispatch
+# from a non-main ref could have `rebuild`/`propose-image` build from and
+# package arbitrary ref content into a PR whose base is still `main`.
 #
 # Serialized (not canceled) against overlapping runs: two runs racing on
 # the same nightly-binding-rebuild or vet-node-* branch could corrupt or
@@ -60,6 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: main
           persist-credentials: false
 
       - name: Use Node.js
@@ -91,17 +103,32 @@ jobs:
             vendor/better-sqlite3/linux-x64-glibc/better_sqlite3.node
           retention-days: 1
 
-      # propose-trusted-image.sh only touches scripts/trusted-build-images.json
-      # and depends on nothing npm ci produced (no node_modules, no build) —
-      # safe to run here, before any write credentials exist.
+  # Deliberately a separate job from `rebuild`, not a step in it: npm ci
+  # runs in `rebuild` and could tamper with propose-trusted-image.sh itself
+  # or its output before either got uploaded — an add-paths allowlist on
+  # the eventual PR only constrains the filename, not the content. This job
+  # never runs npm ci (or needs Node.js at all), so nothing `rebuild`'s
+  # lifecycle scripts could have compromised ever executes here.
+  propose-image:
+    needs: rebuild
+    if: needs.rebuild.outputs.needs_new_image_major != ''
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+
       - name: Propose newly seen Node major for vetting
-        if: steps.bindings.outputs.needs_new_image_major != ''
         env:
-          NODE_MAJOR: ${{ steps.bindings.outputs.needs_new_image_major }}
+          NODE_MAJOR: ${{ needs.rebuild.outputs.needs_new_image_major }}
         run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
 
       - name: Upload trusted-image proposal
-        if: steps.bindings.outputs.needs_new_image_major != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trusted-image-proposal
@@ -131,6 +158,7 @@ jobs:
       # even exists by the time this job starts.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: main
           persist-credentials: false
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
@@ -184,7 +212,7 @@ jobs:
   # the actual rebuild waits for that PR to be reviewed and merged, then
   # a further manual run of this workflow.
   propose:
-    needs: rebuild
+    needs: [rebuild, propose-image]
     if: needs.rebuild.outputs.needs_new_image_major != ''
     runs-on: ubuntu-latest
 
@@ -204,6 +232,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: main
           persist-credentials: false
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 

@@ -85,6 +85,20 @@ if (changedFiles.includes("README.md")) {
 	if (!regex.test(before) || !regex.test(after)) {
 		fail("README.md's compatibility sentence is missing before or after the change");
 	}
+	// The stripped-diff check above only proves the rest of the file is
+	// untouched and the sentence still has the right shape — it strips the
+	// whole sentence before comparing, so any semver pair would pass. Confirm
+	// the captured values are themselves the registry's current latest, same
+	// as the package.json checks below.
+	const [, afterN8n, afterActual] = after.match(regex);
+	const expectedN8n = await getLatestNpmVersion("n8n");
+	if (afterN8n !== expectedN8n) {
+		fail(`README.md: compatibility sentence's n8n version (${afterN8n}) does not match n8n's current published latest (${expectedN8n}) on npm`);
+	}
+	const expectedActualForReadme = await getLatestNpmVersion("@actual-app/api");
+	if (afterActual !== expectedActualForReadme) {
+		fail(`README.md: compatibility sentence's Actual version (${afterActual}) does not match @actual-app/api's current published latest (${expectedActualForReadme}) on npm`);
+	}
 }
 
 // package.json: only n8nWorkflowVersion and/or devDependencies["@actual-app/api"]
