@@ -58,9 +58,16 @@ const changedFiles = execFileSync("git", ["diff", "--name-only", "HEAD"], { enco
 	.split("\n")
 	.filter(Boolean);
 
+// This validator only ever runs in nightly-version-bump.yml's commit job,
+// itself gated on prepare's own updates_found=true — so reaching this point
+// with an empty diff is not "nothing to do," it's an anomaly. A compromised
+// lifecycle script in prepare's npm ci/npm install could run after
+// version:update legitimately rewrote the files and restore them back to
+// their original HEAD content, making the uploaded artifact indistinguishable
+// from no change at all — silently suppressing the compatibility-update PR
+// with no error and no signal. Fail loudly instead of treating that as clean.
 if (changedFiles.length === 0) {
-	console.log("No changes to validate.");
-	process.exit(0);
+	fail("no changes found, but this job only runs when prepare reported updates_found=true — a lifecycle script may have suppressed the legitimate version bump");
 }
 
 for (const file of changedFiles) {
