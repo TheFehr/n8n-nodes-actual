@@ -10,6 +10,11 @@ name: Nightly Native Binding Check
 # Serialized (not canceled) against overlapping runs: gh issue list + gh
 # issue create isn't atomic, so two concurrent runs (scheduled and manual,
 # say) could both find no existing tracking issue and each create one.
+#
+# Pinned to ref: main: a manual workflow_dispatch run can select another
+# branch or tag, and without this, checkout would check *that* ref, so the
+# tracking issue could describe bindings that aren't actually present on
+# main — same reasoning as apply-nightly-fix.yml.
 on:
   schedule:
     - cron: "34 1 * * *"
@@ -39,6 +44,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: main
           persist-credentials: false
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 

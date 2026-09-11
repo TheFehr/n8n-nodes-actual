@@ -79,8 +79,28 @@ jobs:
         with:
           node-version: "24"
 
+      # --ignore-scripts: npm ci would otherwise run every locked dependency's
+      # lifecycle scripts (install/postinstall) on this runner before the
+      # rebuild below ever starts. rebuild-native-bindings.sh copies
+      # node_modules/better-sqlite3's *source* into the pinned, verified
+      # Docker image to compile there — but a compromised lifecycle script
+      # from any OTHER locked dependency has unrestricted filesystem access
+      # and could tamper with that source first, so the trusted toolchain
+      # would just be faithfully compiling already-corrupted input. Skipping
+      # scripts entirely here removes that path.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      # better-sqlite3 needs its own compiled addon for test:pipeline below
+      # (setup-actual-budget.mjs / verify-actual-transactions.mjs run
+      # directly on this runner and import @actual-app/api, which loads it) —
+      # confirmed by testing --ignore-scripts alone: build and unit tests
+      # passed, but the addon was missing. Built explicitly, scoped to just
+      # this one package's own build-release script — not `npm rebuild`,
+      # which re-enables lifecycle scripts across the whole tree, undoing
+      # the --ignore-scripts above for every other locked dependency.
+      - name: Build better-sqlite3's own native addon (runner-side, scoped)
+        run: npm run build-release --prefix node_modules/better-sqlite3
 
       - name: Check and rebuild vendored native bindings
         id: bindings
