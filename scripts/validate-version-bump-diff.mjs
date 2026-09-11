@@ -35,6 +35,20 @@ function gitShowHead(path) {
 	}
 }
 
+// Mirrors update-versions.mjs's own registry lookup — duplicated rather than
+// imported, so this validator has no runtime dependency on that script's
+// behavior and keeps working even if that script changes. Used below to
+// confirm a changed version value is the one the npm registry actually
+// published, not just any syntactically-valid semver string a compromised
+// prepare-job lifecycle script could have substituted.
+async function getLatestNpmVersion(pkg) {
+	const url = `https://registry.npmjs.org/${encodeURIComponent(pkg)}/latest`;
+	const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+	if (!res.ok) fail(`could not fetch ${pkg}'s latest version from npm to authorize the diff: ${res.status} ${res.statusText}`);
+	const data = await res.json();
+	return data.version;
+}
+
 const SEMVER = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`;
 const SEMVER_RE = new RegExp(`^${SEMVER}$`);
 
@@ -95,6 +109,14 @@ if (changedFiles.includes("package.json")) {
 		if (typeof after.n8nWorkflowVersion !== "string" || !SEMVER_RE.test(after.n8nWorkflowVersion)) {
 			fail(`package.json: n8nWorkflowVersion did not change to a plain semver string: ${JSON.stringify(after.n8nWorkflowVersion)}`);
 		}
+		// Syntax alone isn't authentication: a compromised prepare-job
+		// lifecycle script could substitute any other real, published semver
+		// here and pass the check above. Confirm it's the exact value the
+		// registry currently publishes as latest.
+		const expectedWorkflowVersion = await getLatestNpmVersion("n8n-workflow");
+		if (after.n8nWorkflowVersion !== expectedWorkflowVersion) {
+			fail(`package.json: n8nWorkflowVersion (${after.n8nWorkflowVersion}) does not match n8n-workflow's current published latest (${expectedWorkflowVersion}) on npm`);
+		}
 	}
 	const beforeDeps = before.devDependencies ?? {};
 	const afterDeps = after.devDependencies ?? {};
@@ -106,6 +128,10 @@ if (changedFiles.includes("package.json")) {
 		}
 		if (typeof afterDeps[key] !== "string" || !SEMVER_RE.test(afterDeps[key])) {
 			fail(`package.json: devDependencies["@actual-app/api"] did not change to a plain semver string: ${JSON.stringify(afterDeps[key])}`);
+		}
+		const expectedApiVersion = await getLatestNpmVersion("@actual-app/api");
+		if (afterDeps[key] !== expectedApiVersion) {
+			fail(`package.json: devDependencies["@actual-app/api"] (${afterDeps[key]}) does not match @actual-app/api's current published latest (${expectedApiVersion}) on npm`);
 		}
 	}
 }
