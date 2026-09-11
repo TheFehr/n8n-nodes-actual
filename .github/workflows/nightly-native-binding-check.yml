@@ -7,10 +7,17 @@ name: Nightly Native Binding Check
 # never needs contents/pull-requests write, or even Node.js — see
 # scripts/check-native-bindings.sh for why the actual rebuild is
 # deliberately not triggered from here.
+# Serialized (not canceled) against overlapping runs: gh issue list + gh
+# issue create isn't atomic, so two concurrent runs (scheduled and manual,
+# say) could both find no existing tracking issue and each create one.
 on:
   schedule:
     - cron: "34 1 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: nightly-native-binding-check
+  cancel-in-progress: false
 
 jobs:
   check:

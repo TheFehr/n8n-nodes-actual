@@ -11,12 +11,21 @@ name: Nightly Compatibility Version Bump
 # throwaway VM; `commit` does a completely fresh checkout — its own copy of
 # validate-version-bump-diff.mjs, pulled straight from git, that `prepare`'s
 # runner never touched and structurally cannot touch — downloads *only* the
-# three files prepare produced as a build artifact, validates them there,
-# and only then generates write credentials to commit and auto-merge.
+# two files prepare produced as a build artifact, validates them there, and
+# only then generates write credentials to commit and auto-merge.
+#
+# Serialized (not canceled) against overlapping runs: both the scheduled
+# and workflow_dispatch triggers ultimately push to and delete the same
+# `nightly-updates` branch via create-pull-request — two runs racing on
+# that branch could corrupt or drop a compatibility update.
 on:
   schedule:
     - cron: "34 1 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: nightly-version-bump
+  cancel-in-progress: false
 
 jobs:
   prepare:
@@ -66,6 +75,12 @@ jobs:
         if: steps.check_updates.outputs.updates_found == 'true'
         run: npm run test:pipeline
 
+      # package-lock.json is deliberately not uploaded: checking only its
+      # root "name" field after the fact (an earlier version of this
+      # workflow did) can't catch a lifecycle script swapping a dependency's
+      # resolved tarball/integrity. The commit job regenerates it fresh,
+      # itself, with lifecycle scripts disabled, from the validated
+      # package.json instead of trusting this job's copy — see that job.
       - name: Upload updated files
         if: steps.check_updates.outputs.updates_found == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -74,7 +89,6 @@ jobs:
           path: |
             README.md
             package.json
-            package-lock.json
           retention-days: 1
 
   commit:
@@ -112,6 +126,18 @@ jobs:
 
       - name: Validate the diff matches a real version bump
         run: node scripts/validate-version-bump-diff.mjs
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      # Regenerated here, in this trusted job, from the just-validated
+      # package.json — never taken from prepare's (untrusted) output.
+      # --ignore-scripts means nothing untrusted (or anything else) gets a
+      # chance to run at all during this step.
+      - name: Regenerate the lockfile
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: Create Pull Request
         id: cpr

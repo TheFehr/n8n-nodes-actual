@@ -1,12 +1,24 @@
 // Runs right before nightly-version-bump.yml hands the working tree to
 // create-pull-request, which snapshots whatever's dirty and auto-merges it
 // with no human review. That's fine for the diff update-versions.mjs
-// actually produces — but npm ci (run earlier in the same job, with write
-// credentials live) executes lifecycle scripts from the locked
-// dependencies, which could tamper with any tracked file. This doesn't try
-// to prevent that tampering at its source; it validates the *result*
-// against the exact, known shape of a legitimate version bump, and fails
-// loudly if anything else changed, regardless of where it came from.
+// actually produces — but npm ci (run earlier, in the untrusted prepare
+// job) executes lifecycle scripts from the locked dependencies, which could
+// tamper with any tracked file. This doesn't try to prevent that tampering
+// at its source; it validates the *result* against the exact, known shape
+// of a legitimate version bump, and fails loudly if anything else changed,
+// regardless of where it came from.
+//
+// package-lock.json is deliberately NOT in the allowed set here: checking
+// only its root "name" field (an earlier version of this script did) can't
+// catch a lifecycle script swapping a dependency's resolved tarball/
+// integrity, or repointing devDependencies["@actual-app/api"] at a git URL
+// or an "npm:other-package@version" alias instead of a real version — npm
+// accepts any of those as a valid dependency value, and nothing here could
+// tell the difference from a legitimate bump by inspecting the file alone.
+// So the untrusted job no longer uploads package-lock.json at all; once
+// this validator confirms package.json's new values are themselves sane
+// semver strings, the trusted job regenerates the lockfile fresh, itself,
+// with lifecycle scripts disabled — see nightly-version-bump.yml.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -23,7 +35,10 @@ function gitShowHead(path) {
 	}
 }
 
-const ALLOWED_PATHS = new Set(["README.md", "package.json", "package-lock.json"]);
+const SEMVER = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`;
+const SEMVER_RE = new RegExp(`^${SEMVER}$`);
+
+const ALLOWED_PATHS = new Set(["README.md", "package.json"]);
 
 const changedFiles = execFileSync("git", ["diff", "--name-only", "HEAD"], { encoding: "utf8" })
 	.split("\n")
@@ -36,7 +51,7 @@ if (changedFiles.length === 0) {
 
 for (const file of changedFiles) {
 	if (!ALLOWED_PATHS.has(file)) {
-		fail(`unexpected file changed: ${file} (only ${[...ALLOWED_PATHS].join(", ")} are expected)`);
+		fail(`unexpected file changed: ${file} (only ${[...ALLOWED_PATHS].join(", ")} are expected here)`);
 	}
 }
 
@@ -45,9 +60,8 @@ for (const file of changedFiles) {
 if (changedFiles.includes("README.md")) {
 	const before = gitShowHead("README.md");
 	const after = readFileSync("README.md", "utf8");
-	const semver = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`;
 	const regex = new RegExp(
-		`This was developed for version (${semver}) of n8n and version (${semver}) of Actual\\.`,
+		`This was developed for version (${SEMVER}) of n8n and version (${SEMVER}) of Actual\\.`,
 	);
 	const beforeStripped = before.replace(regex, "\0");
 	const afterStripped = after.replace(regex, "\0");
@@ -61,7 +75,10 @@ if (changedFiles.includes("README.md")) {
 
 // package.json: only n8nWorkflowVersion and/or devDependencies["@actual-app/api"]
 // may differ, structurally (parsed JSON, not text) — anything else, at any
-// depth, fails.
+// depth, fails. Their new values must also themselves be plain semver
+// strings — not a git URL, tarball URL, or "npm:other-package@version"
+// alias, all of which npm accepts as a dependency value just as readily as
+// a real version, and none of which update-versions.mjs would ever produce.
 if (changedFiles.includes("package.json")) {
 	const before = JSON.parse(gitShowHead("package.json"));
 	const after = JSON.parse(readFileSync("package.json", "utf8"));
@@ -75,8 +92,8 @@ if (changedFiles.includes("package.json")) {
 		}
 	}
 	if (JSON.stringify(before.n8nWorkflowVersion) !== JSON.stringify(after.n8nWorkflowVersion)) {
-		if (typeof after.n8nWorkflowVersion !== "string") {
-			fail("package.json: n8nWorkflowVersion did not change to a string");
+		if (typeof after.n8nWorkflowVersion !== "string" || !SEMVER_RE.test(after.n8nWorkflowVersion)) {
+			fail(`package.json: n8nWorkflowVersion did not change to a plain semver string: ${JSON.stringify(after.n8nWorkflowVersion)}`);
 		}
 	}
 	const beforeDeps = before.devDependencies ?? {};
@@ -87,18 +104,9 @@ if (changedFiles.includes("package.json")) {
 		if (key !== "@actual-app/api") {
 			fail(`package.json: unexpected devDependencies field changed: ${key}`);
 		}
-	}
-}
-
-// package-lock.json: can legitimately touch many lines (npm's own
-// transitive resolution), so this can't be validated line-by-line the same
-// way — but it must still be valid JSON describing the same root package,
-// which catches gross tampering (e.g. a script overwriting it outright).
-if (changedFiles.includes("package-lock.json")) {
-	const before = JSON.parse(gitShowHead("package-lock.json"));
-	const after = JSON.parse(readFileSync("package-lock.json", "utf8"));
-	if (before.name !== after.name) {
-		fail(`package-lock.json: root package name changed (${before.name} -> ${after.name})`);
+		if (typeof afterDeps[key] !== "string" || !SEMVER_RE.test(afterDeps[key])) {
+			fail(`package.json: devDependencies["@actual-app/api"] did not change to a plain semver string: ${JSON.stringify(afterDeps[key])}`);
+		}
 	}
 }
 

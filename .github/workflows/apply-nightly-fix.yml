@@ -23,6 +23,13 @@ on:
         description: "Tracking issue number to close on success (optional)"
         required: false
 
+# Serialized (not canceled) against overlapping runs, same reasoning as
+# nightly-version-bump.yml: two runs racing on the same nightly-binding-
+# rebuild or vet-node-* branch could corrupt or drop the resulting PR.
+concurrency:
+  group: apply-nightly-fix
+  cancel-in-progress: false
+
 jobs:
   fix:
     runs-on: ubuntu-latest
