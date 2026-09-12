@@ -216,14 +216,19 @@ jobs:
           delete-branch: true
           sign-commits: true
 
+      # No non-auto fallback: main requires the "build" status check, so a
+      # bare `gh pr merge --squash` only ever succeeds once that check has
+      # already passed anyway — it doesn't bypass anything. But it also
+      # doesn't retry or wait, so if that check simply hasn't finished yet,
+      # falling back to it would silently fail to merge with no follow-up,
+      # rather than leaving the PR correctly queued in auto-merge. Let this
+      # step fail loudly instead if --auto itself doesn't work.
       - name: Enable Auto-Merge
         if: steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        run: |
-          gh pr merge --auto --squash "$PR_NUMBER" ||
-            gh pr merge --squash "$PR_NUMBER"
+        run: gh pr merge --auto --squash "$PR_NUMBER"
 
   # n8n bundling a Node major with no vetted build image yet is the one
   # case that needs a *second* manual run of this workflow: this proposes

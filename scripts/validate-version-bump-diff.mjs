@@ -157,4 +157,32 @@ if (changedFiles.includes("package.json")) {
 	}
 }
 
+// package.json's devDependencies["@actual-app/api"] and README.md's
+// compatibility sentence's "Actual" version are both written from the exact
+// same actualVersion value inside update-versions.mjs, in the same run —
+// unlike n8nWorkflowVersion (package.json) and the "n8n" version (README),
+// which come from two independent npm packages ("n8n-workflow" and "n8n")
+// and can legitimately move on their own. So, unlike those, these two are
+// never allowed to disagree, regardless of which file(s) happen to appear
+// in changedFiles: a compromised script could let package.json's update go
+// through untouched while specifically suppressing README's matching
+// update (or vice versa), producing a diff that looks like a valid
+// single-target update but is actually a partial, inconsistent one.
+const finalPkg = JSON.parse(readFileSync("package.json", "utf8"));
+const finalPkgApiVersion = finalPkg.devDependencies?.["@actual-app/api"];
+const finalReadme = readFileSync("README.md", "utf8");
+const finalReadmeRegex = new RegExp(
+	`This was developed for version (?:${SEMVER}) of n8n and version (${SEMVER}) of Actual\\.`,
+);
+const finalReadmeMatch = finalReadme.match(finalReadmeRegex);
+if (!finalReadmeMatch) {
+	fail("README.md's compatibility sentence is missing");
+}
+const finalReadmeApiVersion = finalReadmeMatch[1];
+if (finalPkgApiVersion !== finalReadmeApiVersion) {
+	fail(
+		`package.json's devDependencies["@actual-app/api"] (${finalPkgApiVersion}) and README.md's compatibility sentence's Actual version (${finalReadmeApiVersion}) disagree — both come from the same @actual-app/api registry lookup in the same run, so a mismatch means one file's update was suppressed`,
+	);
+}
+
 console.log(`OK: diff matches the expected shape of a version bump (${changedFiles.join(", ")}).`);
