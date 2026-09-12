@@ -1,15 +1,51 @@
 name: Apply Nightly Fix
 
-# workflow_dispatch only, deliberately — this is the half of the nightly
-# pipeline that installs packages and compiles code inside a pinned base
-# image, from a live package repository, to produce a binary this repo
-# ships to every user of the node. That toolchain execution can't be made
-# safe by a human reviewing the resulting compiled bytes afterwards (a
-# backdoored .node file looks exactly like a clean one) — what actually
+# workflow_dispatch only, deliberately — this is specifically the native-
+# binding rebuild, which installs packages and compiles code inside a
+# pinned base image, from a live package repository, to produce a binary
+# this repo ships to every user of the node. That toolchain execution can't
+# be made safe by a human reviewing the resulting compiled bytes afterwards
+# (a backdoored .node file looks exactly like a clean one) — what actually
 # matters is that it never runs unattended on a public, predictable
-# schedule an attacker could plan around. See Nightly Compatibility Check
-# (nightly.yml) for the read-only detection half, which opens/updates a
-# tracking issue instead of running any of this itself.
+# schedule an attacker could plan around. See Nightly Native Binding Check
+# (nightly-native-binding-check.yml) for the read-only detection half,
+# which opens/updates a tracking issue instead of running any of this
+# itself.
+#
+# The routine compatibility-version bump (README/package.json text edits,
+# no native compilation) is NOT gated here — it never carried this risk and
+# ran fully automatically long before this workflow existed; see
+# nightly-version-bump.yml, which still does.
+#
+# Four jobs, deliberately, along two independent chains — same reasoning as
+# nightly-version-bump.yml, applied twice over:
+#
+# - `rebuild` runs npm ci (executing lifecycle scripts from the locked
+#   dependencies) and the actual native-toolchain compile; either could
+#   tamper with any tracked file. It has no write credentials at all —
+#   `contents: read` only — and can only ever compromise its own throwaway
+#   VM. It uploads only the exact vendored binding files as a build
+#   artifact. `commit` does a completely fresh checkout, generates write
+#   credentials only after that checkout, downloads *only* that artifact,
+#   and applies it with an explicit `add-paths` allowlist — never "whatever
+#   changed in the working tree".
+# - `propose-image` (the "unvetted Node major" path) deliberately never
+#   runs npm ci at all — propose-trusted-image.sh needs nothing it
+#   produces — precisely so a compromised lifecycle script in `rebuild`'s
+#   throwaway VM can never be in a position to tamper with this script or
+#   its output before `propose` picks it up. `propose` again does a fresh
+#   checkout, generates write credentials only afterward, and applies only
+#   the downloaded artifact via `add-paths`.
+#
+# Every checkout below is pinned to `ref: main`: this workflow only ever
+# repairs main's current tip, regardless of which branch/tag a manual
+# workflow_dispatch run happens to be invoked from — otherwise a dispatch
+# from a non-main ref could have `rebuild`/`propose-image` build from and
+# package arbitrary ref content into a PR whose base is still `main`.
+#
+# Serialized (not canceled) against overlapping runs: two runs racing on
+# the same nightly-binding-rebuild or vet-node-* branch could corrupt or
+# drop the resulting PR.
 on:
   workflow_dispatch:
     inputs:
@@ -17,8 +53,192 @@ on:
         description: "Tracking issue number to close on success (optional)"
         required: false
 
+concurrency:
+  group: apply-nightly-fix
+  cancel-in-progress: false
+
 jobs:
-  fix:
+  rebuild:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    outputs:
+      bindings_changed: ${{ steps.bindings.outputs.bindings_changed }}
+      needs_new_image_major: ${{ steps.bindings.outputs.needs_new_image_major }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      # --ignore-scripts: npm ci would otherwise run every locked dependency's
+      # lifecycle scripts (install/postinstall) on this runner before the
+      # rebuild below ever starts. rebuild-native-bindings.sh copies
+      # node_modules/better-sqlite3's *source* into the pinned, verified
+      # Docker image to compile there — but a compromised lifecycle script
+      # from any OTHER locked dependency has unrestricted filesystem access
+      # and could tamper with that source first, so the trusted toolchain
+      # would just be faithfully compiling already-corrupted input. Skipping
+      # scripts entirely here removes that path.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # better-sqlite3 needs its own compiled addon for test:pipeline below
+      # (setup-actual-budget.mjs / verify-actual-transactions.mjs run
+      # directly on this runner and import @actual-app/api, which loads it) —
+      # confirmed by testing --ignore-scripts alone: build and unit tests
+      # passed, but the addon was missing. Built explicitly, scoped to just
+      # this one package's own build-release script — not `npm rebuild`,
+      # which re-enables lifecycle scripts across the whole tree, undoing
+      # the --ignore-scripts above for every other locked dependency.
+      - name: Build better-sqlite3's own native addon (runner-side, scoped)
+        run: npm run build-release --prefix node_modules/better-sqlite3
+
+      - name: Check and rebuild vendored native bindings
+        id: bindings
+        run: bash scripts/rebuild-native-bindings.sh
+
+      - name: Run pipeline
+        if: steps.bindings.outputs.bindings_changed == 'true'
+        run: npm run test:pipeline
+
+      # Only the exact rebuilt binding files — never the whole working tree
+      # — so a compromised npm ci lifecycle script has nothing to smuggle
+      # through even if it tampered with something else on this runner.
+      - name: Upload rebuilt bindings
+        if: steps.bindings.outputs.bindings_changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rebuilt-bindings
+          path: |
+            vendor/better-sqlite3/linux-x64-musl/better_sqlite3.node
+            vendor/better-sqlite3/linux-x64-glibc/better_sqlite3.node
+          retention-days: 1
+
+  # Deliberately a separate job from `rebuild`, not a step in it: npm ci
+  # runs in `rebuild` and could tamper with propose-trusted-image.sh itself
+  # or its output before either got uploaded — an add-paths allowlist on
+  # the eventual PR only constrains the filename, not the content. This job
+  # never runs npm ci (or needs Node.js at all), so nothing `rebuild`'s
+  # lifecycle scripts could have compromised ever executes here.
+  propose-image:
+    needs: rebuild
+    if: needs.rebuild.outputs.needs_new_image_major != ''
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Propose newly seen Node major for vetting
+        env:
+          NODE_MAJOR: ${{ needs.rebuild.outputs.needs_new_image_major }}
+        run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
+
+      - name: Upload trusted-image proposal
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trusted-image-proposal
+          path: scripts/trusted-build-images.json
+          retention-days: 1
+
+  commit:
+    needs: rebuild
+    if: needs.rebuild.outputs.bindings_changed == 'true'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # A fresh checkout — untouched by rebuild's runner, which no longer
+      # even exists by the time this job starts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Download rebuilt bindings
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rebuilt-bindings
+          path: vendor/better-sqlite3
+
+      # The tracking issue (if any) is closed by GitHub itself, natively, via
+      # the "Closes #N" keyword below — only once the PR actually merges, not
+      # when auto-merge is merely enabled. `gh pr merge --auto` returns as
+      # soon as auto-merge is turned on, before the PR is actually merged, so
+      # a step here that closed the issue right after would race ahead of the
+      # real outcome — closing it even if the PR later fails its checks and
+      # never merges.
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: rebuild vendored native bindings"
+          title: "Rebuild vendored native bindings"
+          body: |
+            Manually-triggered native binding rebuild.
+            ${{ inputs.issue_number != '' && format('Closes #{0}.', inputs.issue_number) || '' }}
+          # Defense in depth alongside the job split above: even a fully
+          # compromised commit job's checkout can only ever stage these two
+          # exact files.
+          add-paths: |
+            vendor/better-sqlite3/linux-x64-musl/better_sqlite3.node
+            vendor/better-sqlite3/linux-x64-glibc/better_sqlite3.node
+          branch: nightly-binding-rebuild
+          base: main
+          delete-branch: true
+          sign-commits: true
+
+      # No non-auto fallback: main requires the "build" status check, so a
+      # bare `gh pr merge --squash` only ever succeeds once that check has
+      # already passed anyway — it doesn't bypass anything. But it also
+      # doesn't retry or wait, so if that check simply hasn't finished yet,
+      # falling back to it would silently fail to merge with no follow-up,
+      # rather than leaving the PR correctly queued in auto-merge. Let this
+      # step fail loudly instead if --auto itself doesn't work.
+      - name: Enable Auto-Merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh pr merge --auto --squash "$PR_NUMBER"
+
+  # n8n bundling a Node major with no vetted build image yet is the one
+  # case that needs a *second* manual run of this workflow: this proposes
+  # the allowlist addition (with the verify-node-image.sh evidence baked
+  # into the PR body) but deliberately has no Enable Auto-Merge step —
+  # the actual rebuild waits for that PR to be reviewed and merged, then
+  # a further manual run of this workflow.
+  propose:
+    needs: [rebuild, propose-image]
+    if: needs.rebuild.outputs.needs_new_image_major != ''
     runs-on: ubuntu-latest
 
     permissions:
@@ -37,103 +257,24 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: main
           persist-credentials: false
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Use Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - name: Download trusted-image proposal
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          node-version: "24"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check for updates
-        id: check_updates
-        run: |
-          set +e
-          npm run version:check
-          code=$?
-          set -e
-          if [ "$code" -eq 0 ]; then
-            echo "updates_found=false" >> "$GITHUB_OUTPUT"
-          elif [ "$code" -eq 2 ]; then
-            echo "updates_found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "version:check failed (exit $code)" && exit "$code"
-          fi
-
-      - name: Update files
-        if: steps.check_updates.outputs.updates_found == 'true'
-        run: |
-          npm run version:update
-          npm install
-
-      - name: Check and rebuild vendored native bindings
-        id: bindings
-        run: bash scripts/rebuild-native-bindings.sh
-
-      - name: Run pipeline
-        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
-        run: npm run test:pipeline
-
-      # The tracking issue (if any) is closed by GitHub itself, natively, via
-      # the "Closes #N" keyword below — only once the PR actually merges, not
-      # when auto-merge is merely enabled. `gh pr merge --auto` returns as
-      # soon as auto-merge is turned on, before the PR is actually merged, so
-      # a step here that closed the issue right after would race ahead of the
-      # real outcome — closing it even if the PR later fails its checks and
-      # never merges. The keyword is also withheld whenever this same run
-      # also found an unvetted Node major: this PR alone wouldn't actually
-      # resolve the tracking issue in that case (the binding rebuild is still
-      # blocked on the separate vetting PR below), so closing it here would
-      # hide a still-open problem.
-      - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_found == 'true' || steps.bindings.outputs.bindings_changed == 'true'
-        id: cpr
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: nightly compatibility updates"
-          title: "Nightly Compatibility Updates"
-          body: |
-            Manually-triggered compatibility updates.
-            ${{ inputs.issue_number != '' && steps.bindings.outputs.needs_new_image_major == '' && format('Closes #{0}.', inputs.issue_number) || '' }}
-          branch: nightly-updates
-          base: main
-          delete-branch: true
-          sign-commits: true
-
-      - name: Enable Auto-Merge
-        if: steps.cpr.outputs.pull-request-number != ''
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        run: |
-          gh pr merge --auto --squash "$PR_NUMBER" ||
-            gh pr merge --squash "$PR_NUMBER"
-
-      # n8n bundling a Node major with no vetted build image yet is the one
-      # case that needs a *second* manual run of this workflow: this proposes
-      # the allowlist addition (with the verify-node-image.sh evidence baked
-      # into the PR body) but deliberately has no Enable Auto-Merge step —
-      # the actual rebuild waits for that PR to be reviewed and merged, then
-      # a further manual run of this workflow.
-      - name: Propose newly seen Node major for vetting
-        if: steps.bindings.outputs.needs_new_image_major != ''
-        env:
-          NODE_MAJOR: ${{ steps.bindings.outputs.needs_new_image_major }}
-        run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
+          name: trusted-image-proposal
+          path: scripts
 
       - name: Create Pull Request (new trusted build image)
-        if: steps.bindings.outputs.needs_new_image_major != ''
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
-          title: "Vet Node ${{ steps.bindings.outputs.needs_new_image_major }} build images for native binding rebuilds"
+          commit-message: "chore: vet Node ${{ needs.rebuild.outputs.needs_new_image_major }} build images for native binding rebuilds"
+          title: "Vet Node ${{ needs.rebuild.outputs.needs_new_image_major }} build images for native binding rebuilds"
           body: |
-            n8n now bundles Node ${{ steps.bindings.outputs.needs_new_image_major }}, which has no vetted
+            n8n now bundles Node ${{ needs.rebuild.outputs.needs_new_image_major }}, which has no vetted
             build image yet in `scripts/trusted-build-images.json`. No native-binding rebuild
             happens until this is merged — re-run "Apply Nightly Fix" afterwards to pick it up.
 
@@ -145,7 +286,8 @@ jobs:
             that script's header). Build-tool package versions (python3/make/g++/curl) were
             also resolved and pinned at this same commit. See the job log for the full
             PASS/FAIL evidence.
-          branch: vet-node-${{ steps.bindings.outputs.needs_new_image_major }}
+          add-paths: scripts/trusted-build-images.json
+          branch: vet-node-${{ needs.rebuild.outputs.needs_new_image_major }}
           base: main
           delete-branch: true
           sign-commits: true

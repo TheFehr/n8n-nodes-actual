@@ -1,0 +1,108 @@
+name: Nightly Native Binding Check
+
+# Read-only detection for the vendored native bindings only — the routine
+# compatibility-version bump is handled separately, fully automatically, by
+# nightly-version-bump.yml (it never carried the risk this split exists
+# for). This job never installs a package or compiles anything, so it
+# never needs contents/pull-requests write, or even Node.js — see
+# scripts/check-native-bindings.sh for why the actual rebuild is
+# deliberately not triggered from here.
+# Serialized (not canceled) against overlapping runs: gh issue list + gh
+# issue create isn't atomic, so two concurrent runs (scheduled and manual,
+# say) could both find no existing tracking issue and each create one.
+#
+# Pinned to ref: main: a manual workflow_dispatch run can select another
+# branch or tag, and without this, checkout would check *that* ref, so the
+# tracking issue could describe bindings that aren't actually present on
+# main — same reasoning as apply-nightly-fix.yml.
+on:
+  schedule:
+    - cron: "34 1 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-native-binding-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-issues: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      # Only ever runs a require() check against the already-vendored binaries
+      # inside official images — no package installation, no compilation.
+      # Safe to run unattended. Never lets an unexpected failure here (e.g.
+      # the script itself erroring before it writes needs_attention) silently
+      # skip the tracking-issue step with nothing surfaced.
+      - name: Check vendored native bindings
+        id: bindings
+        run: |
+          set +e
+          bash scripts/check-native-bindings.sh
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "checker_error=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.bindings.outputs.needs_attention == 'true' || steps.bindings.outputs.checker_error == 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          BINDING_REASONS: ${{ steps.bindings.outputs.reasons }}
+          CHECKER_ERROR: ${{ steps.bindings.outputs.checker_error }}
+        run: |
+          {
+            echo "Nightly native-binding check found something that needs a human to run the fix."
+            echo
+            if [ -n "$BINDING_REASONS" ]; then
+              echo "$BINDING_REASONS"
+            fi
+            if [ "$CHECKER_ERROR" = "true" ]; then
+              echo "- \`scripts/check-native-bindings.sh\` failed unexpectedly — see the workflow run log."
+            fi
+            echo
+            echo "This check never installs a package or compiles anything, and never runs the fix"
+            echo "itself — the actual rebuild does both of those from a pinned base image, so it only"
+            echo "ever runs via a human deliberately triggering it, on their own schedule an attacker"
+            echo "can't predict. When you're ready:"
+            echo
+            echo "1. Go to Actions -> \"Apply Nightly Fix\" -> \"Run workflow\"."
+            echo "2. Optionally pass this issue's number as the \`issue_number\` input so it closes automatically."
+          } >/tmp/issue-body.md
+
+          # `// empty` matters: with no matching issue, `.[0].number` is jq
+          # null, which prints the literal string "null" — a non-empty bash
+          # string that [ -n ] treats as true, so without this the first-ever
+          # run (no tracking issue exists yet) would call `gh issue edit
+          # "null"` instead of creating one.
+          EXISTING=$(gh issue list --state open --search "\"Nightly native-binding check needs attention\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body-file /tmp/issue-body.md
+            echo "Updated existing issue #$EXISTING"
+          else
+            gh issue create --title "Nightly native-binding check needs attention" --body-file /tmp/issue-body.md --assignee TheFehr
+          fi
+
+      - name: Fail if the checker errored
+        if: steps.bindings.outputs.checker_error == 'true'
+        run: exit 1
