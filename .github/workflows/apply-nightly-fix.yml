@@ -115,7 +115,7 @@ jobs:
       # through even if it tampered with something else on this runner.
       - name: Upload rebuilt bindings
         if: steps.bindings.outputs.bindings_changed == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: rebuilt-bindings
           path: |
@@ -149,7 +149,7 @@ jobs:
         run: bash scripts/propose-trusted-image.sh "$NODE_MAJOR"
 
       - name: Upload trusted-image proposal
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: trusted-image-proposal
           path: scripts/trusted-build-images.json
