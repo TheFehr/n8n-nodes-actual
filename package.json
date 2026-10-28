@@ -47,7 +47,7 @@
   "devDependencies": {
     "@actual-app/api": "26.10.0",
     "@n8n/node-cli": "*",
-    "@types/node": "^25.5.2",
+    "@types/node": "^26.0.0",
     "detect-libc": "^2.1.2",
     "esbuild": "^0.28.1",
     "eslint": "9.39.5",
