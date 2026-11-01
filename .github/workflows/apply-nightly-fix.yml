@@ -15,10 +15,10 @@ name: Apply Nightly Fix
 # The routine compatibility-version bump (README/package.json text edits,
 # no native compilation) is NOT gated here — it never carried this risk and
 # ran fully automatically long before this workflow existed; see
-# nightly-version-bump.yml, which still does.
+# nightly.yml, which still does.
 #
 # Four jobs, deliberately, along two independent chains — same reasoning as
-# nightly-version-bump.yml, applied twice over:
+# nightly.yml, applied twice over:
 #
 # - `rebuild` runs npm ci (executing lifecycle scripts from the locked
 #   dependencies) and the actual native-toolchain compile; either could

@@ -32,7 +32,14 @@ E2E budgets are currently **not** supported.
 
 ## Compatibility
 
-This was developed for version 2.45.7 of n8n and version 26.10.0 of Actual.
+Last tested with n8n 2.45.7 and Actual 26.10.0.
+
+## Versioning
+
+The package version mirrors the Actual it was last tested with: `major.minor` is Actual's, so `26.10.x` goes with Actual `26.10`. The patch number is this package's own counter.
+
+- Every change to the node, **including breaking ones**, only bumps the patch. Breaking changes are called out in the release notes, not in the version number. Read the notes before updating.
+- When Actual's major or minor version changes, the next release is `<major>.<minor>.0`, after the nightly compatibility check has passed against the new Actual.
 
 ## Resources
 

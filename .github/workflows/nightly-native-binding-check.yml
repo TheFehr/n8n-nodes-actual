@@ -2,7 +2,7 @@ name: Nightly Native Binding Check
 
 # Read-only detection for the vendored native bindings only — the routine
 # compatibility-version bump is handled separately, fully automatically, by
-# nightly-version-bump.yml (it never carried the risk this split exists
+# nightly.yml (it never carried the risk this split exists
 # for). This job never installs a package or compiles anything, so it
 # never needs contents/pull-requests write, or even Node.js — see
 # scripts/check-native-bindings.sh for why the actual rebuild is
