@@ -1,198 +1,27 @@
-name: Sync Version and Publish
+name: Release
 
 on:
   push:
     branches:
       - main
   schedule:
-    # Runs at 03:17 UTC every day. Off the hour/half-hour on purpose - GitHub
-    # Actions queues everyone's "0 0 * * *" cron jobs at once, which delays
-    # them; an odd offset avoids that pile-up.
-    - cron: '17 3 * * *'
-  workflow_dispatch: # Allows manual triggering
+    # Off the hour on purpose: everyone's "0 0 * * *" jobs queue at once and run late.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 permissions:
-  id-token: write  # Required for OIDC
-  contents: write
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  sync-publish:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Generate Token
-        id: generate_token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
-        with:
-          client-id: ${{ secrets.CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0 # Needed for git describe and commit counting
-          persist-credentials: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-          always-auth: true
-
-      - name: Update npm
-        run: npm install -g npm@latest
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run lint
-        run: npm run lint
-
-      - name: Calculate Version and Check for Changes
-        id: check_version
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-        run: |
-          # If this push IS a just-merged release PR (see "Open Release PR"
-          # below), there's nothing to calculate: skip straight to tag+publish.
-          # Detected via the PR's "release" label rather than the commit
-          # message, so a manually-edited merge title can't break detection.
-          HAS_RELEASE_LABEL=$(gh api "repos/${{ github.repository }}/commits/$(git rev-parse HEAD)/pulls" \
-            --jq '[.[] | select(.labels[].name == "release")] | length > 0')
-          if [ "$HAS_RELEASE_LABEL" = "true" ]; then
-            echo "This push is a just-merged release PR."
-            echo "IS_RELEASE_COMMIT=true" >> $GITHUB_OUTPUT
-            echo "SKIP_RELEASE=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          echo "IS_RELEASE_COMMIT=false" >> $GITHUB_OUTPUT
-
-          # Read versions from package.json
-          # Strip any prefixes like ^ or ~ from the version string
-          API_VERSION=$(jq -r '.devDependencies["@actual-app/api"]' package.json | sed 's/^[^0-9]*//')
-          CURRENT_VERSION=$(jq -r .version package.json | sed 's/^[^0-9]*//')
-
-          echo "API Version: $API_VERSION"
-          echo "Current Version: $CURRENT_VERSION"
-
-          # Extract MAJOR and MINOR components
-          API_MAJOR=$(echo "$API_VERSION" | cut -d. -f1)
-          API_MINOR=$(echo "$API_VERSION" | cut -d. -f2)
-          CURRENT_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
-          CURRENT_MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-
-          API_MM="${API_MAJOR}.${API_MINOR}"
-          CURRENT_MM="${CURRENT_MAJOR}.${CURRENT_MINOR}"
-
-          echo "API MAJOR.MINOR: $API_MM"
-          echo "Current MAJOR.MINOR: $CURRENT_MM"
-
-          # Determine the release bump strategy
-          if [ "$API_MAJOR" -gt "$CURRENT_MAJOR" ] || { [ "$API_MAJOR" -eq "$CURRENT_MAJOR" ] && [ "$API_MINOR" -gt "$CURRENT_MINOR" ]; }; then
-              echo "API has newer MAJOR.MINOR. Forcing sync to ${API_MM}.0"
-              RELEASE_BUMP="${API_MM}.0"
-          else
-              echo "MAJOR.MINOR versions are identical or API is older. Using patch."
-              RELEASE_BUMP="patch"
-          fi
-
-          echo "RELEASE_BUMP=$RELEASE_BUMP" >> $GITHUB_OUTPUT
-
-          # Check for changes since the last git tag to prevent empty patch releases
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$LAST_TAG" ]; then
-              COMMITS_SINCE_TAG=$(git rev-list $LAST_TAG..HEAD --count)
-          else
-              COMMITS_SINCE_TAG=1 # If no tags exist, assume there are changes
-          fi
-
-          echo "Commits since last tag ($LAST_TAG): $COMMITS_SINCE_TAG"
-
-          if [ "$RELEASE_BUMP" = "patch" ] && [ "$COMMITS_SINCE_TAG" -eq 0 ]; then
-              echo "No new commits and bump is patch. Skipping release."
-              echo "SKIP_RELEASE=true" >> $GITHUB_OUTPUT
-          else
-              echo "SKIP_RELEASE=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build
-        run: npm run build
-
-      # Required status checks block a direct push to main, and the app token
-      # has no bypass rights - so land the version bump through a real PR
-      # instead. Opening/merging it as the app (not the default GITHUB_TOKEN)
-      # means ci.yml actually triggers on it, so the merge is a normal,
-      # check-satisfying merge rather than something needing a bypass.
-      #
-      # Only ever opened from the nightly cron (or a manual dispatch), never
-      # from an ordinary push: that batches everything merged to main since
-      # the last run into a single release instead of cutting one per push.
-      # A plain push still runs this job, but only to handle the "Tag and
-      # Publish" step below (finishing a release already in flight).
-      - name: Open Release PR
-        if: >-
-          github.event_name != 'push' &&
-          steps.check_version.outputs.IS_RELEASE_COMMIT != 'true' &&
-          steps.check_version.outputs.SKIP_RELEASE != 'true'
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          RELEASE_BUMP: ${{ steps.check_version.outputs.RELEASE_BUMP }}
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-
-          NEW_VERSION=$(npm version "$RELEASE_BUMP" --no-git-tag-version --allow-same-version)
-          NEW_VERSION=${NEW_VERSION#v}
-          echo "Preparing release $NEW_VERSION"
-
-          npx auto-changelog -p
-
-          BRANCH="release/$NEW_VERSION"
-          git checkout -b "$BRANCH"
-          git add package.json package-lock.json CHANGELOG.md
-          git commit -m "Release $NEW_VERSION"
-
-          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push "$REMOTE" "$BRANCH"
-
-          gh label create release --color 0e8a16 --description "Automated release PR" 2>/dev/null || true
-
-          gh pr create --title "Release $NEW_VERSION" \
-            --body "Automated release PR. Merging tags and publishes $NEW_VERSION to npm." \
-            --base main --head "$BRANCH" --label release
-          gh pr merge --auto --squash --subject "Release $NEW_VERSION" "$BRANCH"
-
-      # Runs on the follow-up push once the PR above auto-merges. Tags are
-      # unprotected refs, so this push needs no bypass either.
-      - name: Tag and Publish
-        if: steps.check_version.outputs.IS_RELEASE_COMMIT == 'true'
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
-        run: |
-          NEW_VERSION=$(jq -r .version package.json)
-
-          # HEAD stays the release-PR merge commit until the next push to main, so every
-          # scheduled run until then re-detects IS_RELEASE_COMMIT=true and lands here
-          # again. Only tag+publish once; treat an already-existing tag as "already
-          # released" rather than an error.
-          if git rev-parse -q --verify "refs/tags/$NEW_VERSION" >/dev/null 2>&1; then
-            echo "Tag $NEW_VERSION already exists - already released, nothing to do."
-            exit 0
-          fi
-
-          echo "Tagging and publishing $NEW_VERSION"
-
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git tag "$NEW_VERSION"
-
-          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push "$REMOTE" "$NEW_VERSION"
-
-          # Publish to NPM directly with provenance enabled
-          # We use --ignore-scripts to bypass n8n-node's prerelease check which
-          # would otherwise force us to use 'npm run release'
-          npm publish --provenance --access public --ignore-scripts
+  release:
+    uses: TheFehr/n8n-node-tooling/.github/workflows/release.yml@845877d666f9641ee78acaddc5f799f7910a1544
+    with:
+      tooling-ref: 845877d666f9641ee78acaddc5f799f7910a1544
+    secrets:
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

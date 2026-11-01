@@ -24,8 +24,6 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:pipeline": "bash scripts/full-test.sh",
-    "version:check": "node scripts/update-versions.mjs --check",
-    "version:update": "node scripts/update-versions.mjs",
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
@@ -60,5 +58,20 @@
   "peerDependencies": {
     "n8n-workflow": "*"
   },
-  "n8nWorkflowVersion": "2.16.0"
+  "n8nWorkflowVersion": "2.45.4",
+  "n8nNodeTooling": {
+    "upstream": {
+      "name": "Actual",
+      "source": {
+        "type": "npm",
+        "package": "@actual-app/api"
+      },
+      "track": {
+        "type": "devDependency",
+        "name": "@actual-app/api"
+      },
+      "majorOffset": 0
+    },
+    "readme": "Last tested with n8n {n8n} and Actual {upstream}."
+  }
 }
