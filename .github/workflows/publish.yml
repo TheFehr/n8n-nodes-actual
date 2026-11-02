@@ -13,8 +13,6 @@ permissions:
 
 jobs:
   publish:
-    uses: TheFehr/n8n-node-tooling/.github/workflows/publish.yml@be728ebed0f05b003366f00dfae0702f9617cb28
-    with:
-      tooling-ref: be728ebed0f05b003366f00dfae0702f9617cb28
+    uses: TheFehr/n8n-node-tooling/.github/workflows/publish.yml@b43ddaa44093916845329b1da568f29b48491b9e
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
