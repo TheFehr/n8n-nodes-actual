@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   ci:
-    uses: TheFehr/n8n-node-tooling/.github/workflows/ci.yml@be728ebed0f05b003366f00dfae0702f9617cb28
+    uses: TheFehr/n8n-node-tooling/.github/workflows/ci.yml@b43ddaa44093916845329b1da568f29b48491b9e
     with:
-      tooling-ref: be728ebed0f05b003366f00dfae0702f9617cb28
       integration: true

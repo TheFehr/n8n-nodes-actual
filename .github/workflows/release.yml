@@ -19,9 +19,7 @@ concurrency:
 
 jobs:
   release:
-    uses: TheFehr/n8n-node-tooling/.github/workflows/release.yml@be728ebed0f05b003366f00dfae0702f9617cb28
-    with:
-      tooling-ref: be728ebed0f05b003366f00dfae0702f9617cb28
+    uses: TheFehr/n8n-node-tooling/.github/workflows/release.yml@b43ddaa44093916845329b1da568f29b48491b9e
     secrets:
       CLIENT_ID: ${{ secrets.CLIENT_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
