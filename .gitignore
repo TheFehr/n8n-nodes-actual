@@ -12,3 +12,5 @@ yarn.lock
 
 # Leftover local budget dirs from @actual-app/api test runs
 E2E-Test-Budget-*/
+.claude/worktrees/
+.claude/settings.local.json
