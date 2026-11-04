@@ -3,6 +3,9 @@
   "extends": ["config:recommended", "security:minimumReleaseAgeNpm"],
   "ignorePaths": ["docker-compose.test.yml", "Dockerfile.test-n8n"],
   "platformAutomerge": true,
+  "vulnerabilityAlerts": {
+    "automerge": false
+  },
   "packageRules": [
     {
       "matchPackageNames": ["@actual-app/api"],
