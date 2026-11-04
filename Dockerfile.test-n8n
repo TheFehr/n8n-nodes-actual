@@ -1,4 +1,4 @@
-ARG N8N_IMAGE=n8nio/n8n:2.47.2
+ARG N8N_IMAGE=n8nio/n8n:3.1.0
 
 FROM ${N8N_IMAGE}
 
