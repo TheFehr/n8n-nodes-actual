@@ -72,6 +72,11 @@
       },
       "majorOffset": 0
     },
-    "readme": "Last tested with n8n {n8n} and Actual {upstream}."
+    "readme": "Last tested with n8n {n8n} and Actual {upstream}.",
+    "pins": {
+      "n8n-image": { "file": "docker-compose.test.yml", "template": "N8N_IMAGE: n8nio/n8n:{version}", "from": "n8n" },
+      "n8n-base-image": { "file": "Dockerfile.test-n8n", "template": "ARG N8N_IMAGE=n8nio/n8n:{version}", "from": "n8n" },
+      "actual-server-image": { "file": "docker-compose.test.yml", "template": "image: actualbudget/actual-server:{version}", "from": "upstream" }
+    }
   }
 }
