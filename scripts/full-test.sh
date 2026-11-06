@@ -30,7 +30,7 @@ on_exit() {
     fi
     echo "Cleaning up..."
     docker compose -f docker-compose.test.yml down -v || true
-    rm -f workflow_output.txt tests/workflows/integration_test.json
+    rm -f workflow_output.txt tests/workflows/integration_test.json tests/workflows/integration_credentials_v3.json
     exit $EXIT_CODE
 }
 trap on_exit EXIT
@@ -98,13 +98,26 @@ echo "✓ Account ID: $ACCOUNT_ID"
 echo "✓ Category ID: $CATEGORY_ID"
 echo "✓ Payee ID: $PAYEE_ID"
 
+# Create the END-TO-END ENCRYPTED test budget alongside the unencrypted one (issue #448)
+echo "Setting up end-to-end encrypted test budget..."
+ACTUAL_TEST_E2E_PASS="test-e2e-password"
+E2EE_OUTPUT=$(ACTUAL_TEST_URL="$ACTUAL_TEST_URL" ACTUAL_TEST_PASS="$ACTUAL_TEST_PASS" \
+    ACTUAL_TEST_E2E_PASS="$ACTUAL_TEST_E2E_PASS" \
+    node scripts/setup-actual-encrypted-budget.mjs | tail -1)
+E2EE_BUDGET_ID=$(echo "$E2EE_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['budgetId'])")
+E2EE_ACCOUNT_ID=$(echo "$E2EE_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['accountId'])")
+echo "✓ Encrypted Budget ID: $E2EE_BUDGET_ID"
+
 # Generate workflow JSON with the real budget + account IDs
 echo "Generating integration workflow..."
-python3 - "$BUDGET_ID" "$ACCOUNT_ID" << 'PYEOF'
+python3 - "$BUDGET_ID" "$ACCOUNT_ID" "$E2EE_BUDGET_ID" "$E2EE_ACCOUNT_ID" "$ACTUAL_TEST_E2E_PASS" << 'PYEOF'
 import json, sys
 
 budget_id = sys.argv[1]
 account_id = sys.argv[2]
+e2ee_budget_id = sys.argv[3]
+e2ee_account_id = sys.argv[4]
+e2ee_password = sys.argv[5]
 
 workflow = {
     "id": "1",
@@ -138,11 +151,36 @@ workflow = {
                     "id": "actual-cred-id"
                 }
             }
+        },
+        {
+            # Node version 3: no budgetId parameter; the budget (and its end-to-end
+            # encryption password) comes from the credential.
+            "parameters": {
+                "resource": "transaction",
+                "operation": "importTransactions",
+                "accountId": e2ee_account_id,
+                "transactions": json.dumps([
+                    {"date": "2024-06-03", "amount": -999, "notes": "E2E test V3 encrypted"}
+                ])
+            },
+            "id": "3",
+            "name": "ActualBudget V3 Encrypted Import",
+            "type": "n8n-nodes-actual.actualBudget",
+            "typeVersion": 3,
+            "position": [500, 100],
+            "credentials": {
+                "actualBudgetApi": {
+                    "id": "actual-cred-v3-encrypted-id"
+                }
+            }
         }
     ],
     "connections": {
         "When clicking ‘Test workflow’": {
             "main": [[{"node": "ActualBudget Import", "type": "main", "index": 0}]]
+        },
+        "ActualBudget Import": {
+            "main": [[{"node": "ActualBudget V3 Encrypted Import", "type": "main", "index": 0}]]
         }
     },
     "settings": {"executionOrder": "v1"},
@@ -151,6 +189,20 @@ workflow = {
 
 with open("tests/workflows/integration_test.json", "w") as f:
     json.dump(workflow, f, indent=2)
+
+credentials = [{
+    "id": "actual-cred-v3-encrypted-id",
+    "name": "Actual Budget Integration Test (V3, encrypted)",
+    "type": "actualBudgetApi",
+    "data": {
+        "url": "http://actual:5006",
+        "password": "test-password",
+        "budgetId": e2ee_budget_id,
+        "encryptionPassword": e2ee_password
+    }
+}]
+with open("tests/workflows/integration_credentials_v3.json", "w") as f:
+    json.dump(credentials, f, indent=2)
 print("✓ Workflow JSON written")
 PYEOF
 
@@ -168,6 +220,7 @@ docker compose -f docker-compose.test.yml run --rm \
     rm -f /home/node/.n8n/nodes/node_modules/n8n-nodes-actual && \
     ln -sf /n8n-nodes-actual /home/node/.n8n/nodes/node_modules/n8n-nodes-actual && \
     n8n import:credentials --input=/home/node/custom-nodes/tests/workflows/integration_credentials.json && \
+    n8n import:credentials --input=/home/node/custom-nodes/tests/workflows/integration_credentials_v3.json && \
     n8n import:workflow --input=/home/node/custom-nodes/tests/workflows/integration_test.json && \
     n8n execute --id=1
 " > workflow_output.txt 2>&1
@@ -199,6 +252,21 @@ else
     exit 1
 fi
 
+# Verify the V3 node's transaction landed in the END-TO-END ENCRYPTED budget
+echo "Verifying transaction in the encrypted Actual Budget..."
+E2EE_VERIFY=$(ACTUAL_TEST_URL="$ACTUAL_TEST_URL" ACTUAL_TEST_PASS="$ACTUAL_TEST_PASS" \
+    ACTUAL_TEST_BUDGET_ID="$E2EE_BUDGET_ID" ACTUAL_TEST_ACCOUNT_ID="$E2EE_ACCOUNT_ID" \
+    ACTUAL_TEST_BUDGET_E2E_PASS="$ACTUAL_TEST_E2E_PASS" \
+    node scripts/verify-actual-transactions.mjs | tail -1)
+E2EE_COUNT=$(echo "$E2EE_VERIFY" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")
+if [ "$E2EE_COUNT" -ge 1 ]; then
+    echo "✅ Found $E2EE_COUNT V3 test transaction(s) in the encrypted budget"
+else
+    echo "❌ Expected the V3 test transaction in the encrypted budget, found $E2EE_COUNT"
+    echo "   Details: $E2EE_VERIFY"
+    exit 1
+fi
+
 # Run unit and integration vitest tests
 export RUN_ACTUAL_INTEGRATION="true"
 export ACTUAL_TEST_URL
@@ -207,6 +275,9 @@ export ACTUAL_TEST_BUDGET_ID="$BUDGET_ID"
 export ACTUAL_TEST_ACCOUNT_ID="$ACCOUNT_ID"
 export ACTUAL_TEST_CATEGORY_ID="$CATEGORY_ID"
 export ACTUAL_TEST_PAYEE_ID="$PAYEE_ID"
+export ACTUAL_TEST_E2EE_BUDGET_ID="$E2EE_BUDGET_ID"
+export ACTUAL_TEST_E2EE_ACCOUNT_ID="$E2EE_ACCOUNT_ID"
+export ACTUAL_TEST_E2E_PASS
 
 set +e
 npm run test:run

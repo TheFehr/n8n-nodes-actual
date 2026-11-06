@@ -21,6 +21,26 @@ export class ActualBudgetApi implements ICredentialType {
 			},
 			default: '',
 			required: true
+		},
+		{
+			displayName: 'Budget ID',
+			name: 'budgetId',
+			type: 'string',
+			default: '',
+			placeholder: 'e.g. 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d',
+			description:
+				'The budget (sync ID, found in Actual under Settings > Show advanced settings) this credential works with. Used by node version 3 and later, which has no Budget ID field of its own: create one credential per budget. Older node versions ignore this and use the Budget ID set on the node.',
+		},
+		{
+			displayName: 'End-to-End Encryption Password',
+			name: 'encryptionPassword',
+			type: 'string',
+			typeOptions: {
+				password: true,
+			},
+			default: '',
+			description:
+				'Only needed if your budget uses end-to-end encryption (the "File is encrypted. Please provide a password" error). This is the encryption password set for the budget, not the server password. Leave empty for unencrypted budgets. Belongs to the budget of this credential. Older node versions apply it to whichever budget the node names.',
 		}
 	];
 

@@ -10,11 +10,11 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { init, downloadBudget, shutdown } from '@actual-app/api';
+import { init, shutdown } from '@actual-app/api';
 
 import { runExclusive } from '../executionQueue';
 
-import { Credentials } from './GenericFunctions';
+import { Credentials, downloadBudgetWithAuth } from './GenericFunctions';
 
 import { accountOperation, accountFields, executeAccount } from './actions/account';
 import { budgetOperation, budgetFields, executeBudget } from './actions/budget';
@@ -176,9 +176,15 @@ export class ActualBudgetV2 implements INodeType {
 	}
 }
 
-async function runActualBudget(
+/**
+ * Shared by node versions 2 and 3. `resolveBudgetId` is the only difference between them:
+ * V2 reads the budget from a node parameter (per item), V3 from the credential.
+ */
+export async function runActualBudget(
 	context: IExecuteFunctions,
 	continueOnFail: boolean,
+	resolveBudgetId: (itemIndex: number, auth: Credentials) => string = (itemIndex) =>
+		context.getNodeParameter('budgetId', itemIndex) as string,
 ): Promise<INodeExecutionData[][]> {
 	const items = context.getInputData();
 	const returnData: IDataObject[] = [];
@@ -193,9 +199,9 @@ async function runActualBudget(
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
-				const budgetId = context.getNodeParameter('budgetId', itemIndex) as string;
+				const budgetId = resolveBudgetId(itemIndex, auth);
 				if (budgetId !== loadedBudgetId) {
-					await downloadBudget(budgetId);
+					await downloadBudgetWithAuth(auth, budgetId);
 					loadedBudgetId = budgetId;
 				}
 

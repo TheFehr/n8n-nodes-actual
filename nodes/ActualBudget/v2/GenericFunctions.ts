@@ -1,4 +1,4 @@
-import { IDisplayOptions, INodeProperties } from 'n8n-workflow';
+import { IDisplayOptions, INode, INodeProperties, NodeOperationError } from 'n8n-workflow';
 
 import { init, downloadBudget, shutdown } from '@actual-app/api';
 
@@ -7,6 +7,41 @@ import { runExclusive } from '../executionQueue';
 export interface Credentials {
 	url: string;
 	password: string;
+	/** The budget this credential works with (node version 3+; older versions use a node parameter). */
+	budgetId?: string;
+	/** Optional end-to-end encryption password for the budget file (not the server password). */
+	encryptionPassword?: string;
+}
+
+/**
+ * Node version 3+ takes the budget from the credential. Fails early with a clear message
+ * instead of letting an empty ID surface as an obscure Actual error.
+ */
+export function requireCredentialBudgetId(
+	context: { getNode(): INode },
+	auth: Credentials,
+): string {
+	const budgetId = auth.budgetId?.trim();
+	if (!budgetId) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'This credential has no Budget ID. Set the Budget ID on the Actual Budget API credential (one credential per budget).',
+		);
+	}
+	return budgetId;
+}
+
+/**
+ * Downloads a budget, supplying the end-to-end encryption password when one is configured.
+ * Without one, the call is identical to a plain downloadBudget(id) so unencrypted budgets
+ * are unaffected.
+ */
+export async function downloadBudgetWithAuth(auth: Credentials, budgetId: string): Promise<void> {
+	if (auth.encryptionPassword) {
+		await downloadBudget(budgetId, { password: auth.encryptionPassword });
+	} else {
+		await downloadBudget(budgetId);
+	}
 }
 
 /**
@@ -69,7 +104,7 @@ export async function withBudgetSession<T>(
 	return runExclusive(async () => {
 		await initializeActualBudget(auth);
 		try {
-			await downloadBudget(budgetId);
+			await downloadBudgetWithAuth(auth, budgetId);
 			return await fn();
 		} finally {
 			await shutdown();
