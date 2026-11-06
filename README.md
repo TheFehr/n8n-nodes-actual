@@ -26,9 +26,14 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 
 ## Credentials
-The URL and the password of your actual server.
-E2E budgets are currently **not** supported.
+The URL and the password of your actual server, plus:
 
+- **Budget ID**: the budget this credential works with. Used by node version 3 (the default for new nodes), which has no Budget ID field of its own, so create **one credential per budget**.
+- **End-to-End Encryption Password**: only if that budget uses end-to-end encryption. This is the password you set for the budget, not the server password. Without it, Actual reports `File <name> is encrypted. Please provide a password`. Leave it empty for unencrypted budgets.
+
+Because the budget and its encryption password live together in the credential, budgets with different encryption passwords (or a mix of encrypted and unencrypted budgets) work side by side.
+
+Existing workflows keep working: nodes saved with version 1 or 2 still take the Budget ID from the node itself. For those versions the optional encryption password also applies, but to whichever budget the node names, so a single credential can't serve budgets with different passwords there. Recreate the node (version 3) to get one credential per budget.
 
 ## Compatibility
 

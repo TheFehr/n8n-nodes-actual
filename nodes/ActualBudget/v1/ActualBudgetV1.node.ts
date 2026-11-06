@@ -37,6 +37,7 @@ interface ActualTransaction {
 interface Credentials {
 	url: string;
 	password: string;
+	encryptionPassword?: string;
 }
 
 // This is a frozen snapshot of the pre-resource/operation-refactor node (see
@@ -232,7 +233,11 @@ async function runActualBudget(
 			try {
 				const budgetId = context.getNodeParameter('budgetId', itemIndex) as string;
 				if (budgetId !== loadedBudgetId) {
-					await downloadBudget(budgetId);
+					if (auth.encryptionPassword) {
+						await downloadBudget(budgetId, { password: auth.encryptionPassword });
+					} else {
+						await downloadBudget(budgetId);
+					}
 					loadedBudgetId = budgetId;
 				}
 

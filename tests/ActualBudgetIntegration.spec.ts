@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { ActualBudgetV2 } from "../nodes/ActualBudget/v2/ActualBudgetV2.node";
+import { ActualBudgetV3 } from "../nodes/ActualBudget/v3/ActualBudgetV3.node";
 import { NodeApiError } from "n8n-workflow";
 import type { IDataObject, IExecuteFunctions } from "n8n-workflow";
 import * as api from "@actual-app/api";
@@ -745,4 +746,139 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     await expect(promise).rejects.toBeInstanceOf(NodeApiError);
     await expect(promise).rejects.toThrow('Table "not_a_real_table" does not exist');
   }, 15000);
+
+  describe("end-to-end encrypted budget (#448)", () => {
+    const e2eeBudgetId = process.env.ACTUAL_TEST_E2EE_BUDGET_ID!;
+    const e2eeAccountId = process.env.ACTUAL_TEST_E2EE_ACCOUNT_ID!;
+    const e2eePassword = process.env.ACTUAL_TEST_E2E_PASS || "test-e2e-password";
+
+    function runE2ee(creds: Record<string, unknown>, params: Record<string, unknown>) {
+      const fns = {
+        getInputData: () => [{ json: {} }],
+        getNodeParameter: (name: string) => ({ resource: "transaction", ...params })[name],
+        getNode: () => ({ name: "ActualBudget" }),
+        getCredentials: async () => ({ url: serverURL, password, ...creds }),
+        continueOnFail: () => false,
+        helpers,
+      } as unknown as IExecuteFunctions;
+      return new ActualBudgetV2().execute.call(fns);
+    }
+
+    const importParams = (notes: string) => ({
+      operation: "importTransactions",
+      budgetId: e2eeBudgetId,
+      accountId: e2eeAccountId,
+      transactions: JSON.stringify([{ date: "2024-04-01", amount: -777, notes }]),
+    });
+
+    it("fails with the 'encrypted' error when no encryption password is configured", async () => {
+      await expect(runE2ee({}, importParams("should not land"))).rejects.toThrow(/encrypted/i);
+    }, 30000);
+
+    it("fails when the encryption password is wrong", async () => {
+      await expect(
+        runE2ee({ encryptionPassword: "wrong" }, importParams("should not land")),
+      ).rejects.toThrow(/decrypt/i);
+    }, 30000);
+
+    it("imports transactions into the encrypted budget with the right password", async () => {
+      const result = await runE2ee({ encryptionPassword: e2eePassword }, importParams("E2EE import"));
+      const output = result[0][0].json as Record<string, unknown>;
+      expect((output.errors as unknown[]).length).toBe(0);
+      expect((output.added as unknown[]).length).toBeGreaterThan(0);
+    }, 30000);
+
+    it("reads the imported transaction back from the encrypted budget", async () => {
+      const result = await runE2ee(
+        { encryptionPassword: e2eePassword },
+        {
+          operation: "getTransactions",
+          budgetId: e2eeBudgetId,
+          accountId: e2eeAccountId,
+          startDate: "2024-04-01",
+          endDate: "2024-04-30",
+        },
+      );
+      const notes = result[0].map((r) => (r.json as Record<string, unknown>).notes);
+      expect(notes).toContain("E2EE import");
+    }, 30000);
+
+    it("still loads the NON-encrypted budget when the encryption password is set on the credential", async () => {
+      const result = await runE2ee(
+        { encryptionPassword: e2eePassword },
+        {
+          operation: "getTransactions",
+          budgetId,
+          accountId,
+          startDate: "2024-03-01",
+          endDate: "2024-03-31",
+        },
+      );
+      expect(Array.isArray(result[0])).toBe(true);
+    }, 30000);
+  });
+
+  describe("node V3: one credential per budget, encrypted and plain side by side", () => {
+    const e2eeBudgetId = process.env.ACTUAL_TEST_E2EE_BUDGET_ID!;
+    const e2eeAccountId = process.env.ACTUAL_TEST_E2EE_ACCOUNT_ID!;
+    const e2eePassword = process.env.ACTUAL_TEST_E2E_PASS || "test-e2e-password";
+
+    const plainCred = { url: serverURL, password, budgetId };
+    const encryptedCred = {
+      url: serverURL,
+      password,
+      budgetId: e2eeBudgetId,
+      encryptionPassword: e2eePassword,
+    };
+
+    function runV3(creds: Record<string, unknown>, params: Record<string, unknown>) {
+      const fns = {
+        getInputData: () => [{ json: {} }],
+        // Note: no budgetId node parameter exists in V3.
+        getNodeParameter: (name: string) => ({ resource: "transaction", ...params })[name],
+        getNode: () => ({ name: "ActualBudget" }),
+        getCredentials: async () => creds,
+        continueOnFail: () => false,
+        helpers,
+      } as unknown as IExecuteFunctions;
+      return new ActualBudgetV3().execute.call(fns);
+    }
+
+    const importOp = (accountId: string, notes: string) => ({
+      operation: "importTransactions",
+      accountId,
+      transactions: JSON.stringify([{ date: "2024-05-01", amount: -321, notes }]),
+    });
+    const readOp = (accountId: string) => ({
+      operation: "getTransactions",
+      accountId,
+      startDate: "2024-05-01",
+      endDate: "2024-05-31",
+    });
+    const notesOf = (result: Awaited<ReturnType<typeof runV3>>) =>
+      result[0].map((r) => (r.json as Record<string, unknown>).notes);
+
+    it("writes to and reads from the plain budget via its credential", async () => {
+      const res = await runV3(plainCred, importOp(accountId, "V3 plain"));
+      expect(((res[0][0].json as Record<string, unknown>).added as unknown[]).length).toBeGreaterThan(0);
+      expect(notesOf(await runV3(plainCred, readOp(accountId)))).toContain("V3 plain");
+    }, 30000);
+
+    it("writes to and reads from the encrypted budget via its credential", async () => {
+      const res = await runV3(encryptedCred, importOp(e2eeAccountId, "V3 encrypted"));
+      expect(((res[0][0].json as Record<string, unknown>).added as unknown[]).length).toBeGreaterThan(0);
+      expect(notesOf(await runV3(encryptedCred, readOp(e2eeAccountId)))).toContain("V3 encrypted");
+    }, 30000);
+
+    it("keeps the two budgets separate", async () => {
+      expect(notesOf(await runV3(plainCred, readOp(accountId)))).not.toContain("V3 encrypted");
+      expect(notesOf(await runV3(encryptedCred, readOp(e2eeAccountId)))).not.toContain("V3 plain");
+    }, 60000);
+
+    it("fails with the 'encrypted' error if the encrypted budget's credential lacks the password", async () => {
+      await expect(
+        runV3({ ...encryptedCred, encryptionPassword: "" }, readOp(e2eeAccountId)),
+      ).rejects.toThrow(/encrypted/i);
+    }, 30000);
+  });
 });

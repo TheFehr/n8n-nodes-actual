@@ -19,7 +19,9 @@ if (!budgetId || !accountId) {
 const dataDir = mkdtempSync(join(tmpdir(), "actual-verify-"));
 
 await api.init({ serverURL, password, dataDir });
-await api.downloadBudget(budgetId);
+// Optional end-to-end encryption password, for verifying an encrypted budget.
+const e2ePassword = process.env.ACTUAL_TEST_BUDGET_E2E_PASS;
+await api.downloadBudget(budgetId, e2ePassword ? { password: e2ePassword } : undefined);
 
 const txns = await api.getTransactions(accountId, "2024-06-01", "2024-06-30");
 const e2eTxns = txns.filter((t) => t.notes && t.notes.startsWith("E2E test"));
