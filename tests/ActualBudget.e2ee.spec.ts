@@ -63,7 +63,9 @@ describe("end-to-end encrypted budgets (#448)", () => {
     const Node = version === 1 ? ActualBudgetV1 : ActualBudgetV2;
 
     it(`V${version} passes the encryption password to downloadBudget`, async () => {
-      await new Node().execute.call(makeExecute({ ...base, encryptionPassword: "e2e-pw" }, version));
+      await new Node().execute.call(
+        makeExecute({ ...base, encryptionPassword: "e2e-pw" }, version),
+      );
       expect(actualApi.downloadBudget).toHaveBeenCalledWith("budget-1", { password: "e2e-pw" });
     });
 

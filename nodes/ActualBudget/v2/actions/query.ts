@@ -1,189 +1,189 @@
-import { IDataObject, IExecuteFunctions, INodeProperties, NodeOperationError } from 'n8n-workflow';
+import { IDataObject, IExecuteFunctions, INodeProperties, NodeOperationError } from "n8n-workflow";
 
-import { aqlQuery, q } from '@actual-app/api';
+import { aqlQuery, q } from "@actual-app/api";
 
 export const queryOperation: INodeProperties = {
-	displayName: 'Operation',
-	name: 'operation',
-	type: 'options',
-	noDataExpression: true,
-	displayOptions: {
-		show: {
-			resource: ['query'],
-		},
-	},
-	options: [
-		{
-			name: 'Run',
-			value: 'runQuery',
-			action: 'Run a custom AQL query',
-		},
-	],
-	default: 'runQuery',
+  displayName: "Operation",
+  name: "operation",
+  type: "options",
+  noDataExpression: true,
+  displayOptions: {
+    show: {
+      resource: ["query"],
+    },
+  },
+  options: [
+    {
+      name: "Run",
+      value: "runQuery",
+      action: "Run a custom AQL query",
+    },
+  ],
+  default: "runQuery",
 };
 
 export const queryFields: INodeProperties[] = [
-	{
-		displayName: 'Table',
-		name: 'table',
-		type: 'string',
-		default: 'transactions',
-		required: true,
-		description: 'The table to query, e.g. "transactions", "accounts", "categories", "payees"',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
-	{
-		displayName: 'Filter',
-		name: 'filter',
-		type: 'json',
-		default: '{}',
-		description: 'AQL filter expression object, e.g. {"date": {"$gte": "2024-01-01"}}',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
-	{
-		displayName: 'Select',
-		name: 'select',
-		type: 'json',
-		default: '"*"',
-		description: 'Fields to select: "*", a field name, or a JSON array of fields/expressions',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
-	{
-		displayName: 'Group By',
-		name: 'groupBy',
-		type: 'json',
-		default: '[]',
-		description: 'JSON array of fields/expressions to group by, if any',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
-	{
-		displayName: 'Order By',
-		name: 'orderBy',
-		type: 'json',
-		default: '[]',
-		description: 'JSON array of fields/expressions to order by, if any',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
-	{
-		displayName: 'Limit',
-		name: 'rowLimit',
-		type: 'number',
-		default: 0,
-		description: 'Max number of rows to return (0 = no limit)',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
-	{
-		displayName: 'Offset',
-		name: 'offset',
-		type: 'number',
-		default: 0,
-		description: 'Number of rows to skip (0 = none)',
-		displayOptions: {
-			show: {
-				resource: ['query'],
-				operation: ['runQuery'],
-			},
-		},
-	},
+  {
+    displayName: "Table",
+    name: "table",
+    type: "string",
+    default: "transactions",
+    required: true,
+    description: 'The table to query, e.g. "transactions", "accounts", "categories", "payees"',
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
+  {
+    displayName: "Filter",
+    name: "filter",
+    type: "json",
+    default: "{}",
+    description: 'AQL filter expression object, e.g. {"date": {"$gte": "2024-01-01"}}',
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
+  {
+    displayName: "Select",
+    name: "select",
+    type: "json",
+    default: '"*"',
+    description: 'Fields to select: "*", a field name, or a JSON array of fields/expressions',
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
+  {
+    displayName: "Group By",
+    name: "groupBy",
+    type: "json",
+    default: "[]",
+    description: "JSON array of fields/expressions to group by, if any",
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
+  {
+    displayName: "Order By",
+    name: "orderBy",
+    type: "json",
+    default: "[]",
+    description: "JSON array of fields/expressions to order by, if any",
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
+  {
+    displayName: "Limit",
+    name: "rowLimit",
+    type: "number",
+    default: 0,
+    description: "Max number of rows to return (0 = no limit)",
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
+  {
+    displayName: "Offset",
+    name: "offset",
+    type: "number",
+    default: 0,
+    description: "Number of rows to skip (0 = none)",
+    displayOptions: {
+      show: {
+        resource: ["query"],
+        operation: ["runQuery"],
+      },
+    },
+  },
 ];
 
 function parseJsonParam(context: IExecuteFunctions, name: string, itemIndex: number): unknown {
-	const raw = context.getNodeParameter(name, itemIndex);
-	if (typeof raw !== 'string') return raw;
-	try {
-		return JSON.parse(raw);
-	} catch {
-		throw new NodeOperationError(context.getNode(), `"${name}" field contains invalid JSON`);
-	}
+  const raw = context.getNodeParameter(name, itemIndex);
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new NodeOperationError(context.getNode(), `"${name}" field contains invalid JSON`);
+  }
 }
 
 function parseJsonArrayParam(
-	context: IExecuteFunctions,
-	name: string,
-	itemIndex: number,
+  context: IExecuteFunctions,
+  name: string,
+  itemIndex: number,
 ): unknown[] {
-	const parsed = parseJsonParam(context, name, itemIndex);
-	if (!Array.isArray(parsed)) {
-		throw new NodeOperationError(context.getNode(), `"${name}" must be a JSON array`);
-	}
-	return parsed;
+  const parsed = parseJsonParam(context, name, itemIndex);
+  if (!Array.isArray(parsed)) {
+    throw new NodeOperationError(context.getNode(), `"${name}" must be a JSON array`);
+  }
+  return parsed;
 }
 
 export async function executeQuery(
-	context: IExecuteFunctions,
-	itemIndex: number,
-	operation: string,
+  context: IExecuteFunctions,
+  itemIndex: number,
+  operation: string,
 ): Promise<IDataObject | IDataObject[]> {
-	switch (operation) {
-		case 'runQuery':
-			return handleRunQuery(context, itemIndex);
-		default:
-			throw new NodeOperationError(context.getNode(), `Unknown query operation "${operation}"`);
-	}
+  switch (operation) {
+    case "runQuery":
+      return handleRunQuery(context, itemIndex);
+    default:
+      throw new NodeOperationError(context.getNode(), `Unknown query operation "${operation}"`);
+  }
 }
 
 async function handleRunQuery(
-	context: IExecuteFunctions,
-	itemIndex: number,
+  context: IExecuteFunctions,
+  itemIndex: number,
 ): Promise<IDataObject | IDataObject[]> {
-	const table = context.getNodeParameter('table', itemIndex) as string;
-	const filter = parseJsonParam(context, 'filter', itemIndex) as Record<string, unknown>;
-	const select = parseJsonParam(context, 'select', itemIndex) as string | unknown[];
-	const groupBy = parseJsonArrayParam(context, 'groupBy', itemIndex);
-	const orderBy = parseJsonArrayParam(context, 'orderBy', itemIndex);
-	const limit = context.getNodeParameter('rowLimit', itemIndex) as number;
-	const offset = context.getNodeParameter('offset', itemIndex) as number;
+  const table = context.getNodeParameter("table", itemIndex) as string;
+  const filter = parseJsonParam(context, "filter", itemIndex) as Record<string, unknown>;
+  const select = parseJsonParam(context, "select", itemIndex) as string | unknown[];
+  const groupBy = parseJsonArrayParam(context, "groupBy", itemIndex);
+  const orderBy = parseJsonArrayParam(context, "orderBy", itemIndex);
+  const limit = context.getNodeParameter("rowLimit", itemIndex) as number;
+  const offset = context.getNodeParameter("offset", itemIndex) as number;
 
-	let query = q(table);
-	if (filter && Object.keys(filter).length > 0) {
-		query = query.filter(filter);
-	}
-	if (Array.isArray(select) ? select.length > 0 : Boolean(select)) {
-		query = query.select(select as never);
-	}
-	if (groupBy.length > 0) {
-		query = query.groupBy(groupBy as never);
-	}
-	if (orderBy.length > 0) {
-		query = query.orderBy(orderBy as never);
-	}
-	if (limit > 0) {
-		query = query.limit(limit);
-	}
-	if (offset > 0) {
-		query = query.offset(offset);
-	}
+  let query = q(table);
+  if (filter && Object.keys(filter).length > 0) {
+    query = query.filter(filter);
+  }
+  if (Array.isArray(select) ? select.length > 0 : Boolean(select)) {
+    query = query.select(select as never);
+  }
+  if (groupBy.length > 0) {
+    query = query.groupBy(groupBy as never);
+  }
+  if (orderBy.length > 0) {
+    query = query.orderBy(orderBy as never);
+  }
+  if (limit > 0) {
+    query = query.limit(limit);
+  }
+  if (offset > 0) {
+    query = query.offset(offset);
+  }
 
-	const { data } = (await aqlQuery(query)) as { data: IDataObject[] };
-	return data;
+  const { data } = (await aqlQuery(query)) as { data: IDataObject[] };
+  return data;
 }

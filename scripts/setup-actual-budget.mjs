@@ -27,9 +27,7 @@ if (budgets.length === 0) {
 const budget = budgets[0];
 const budgetId = budget.groupId;
 if (!budgetId) {
-  throw new Error(
-    `Budget has no groupId — got: ${JSON.stringify(budget)}. Cannot continue.`,
-  );
+  throw new Error(`Budget has no groupId — got: ${JSON.stringify(budget)}. Cannot continue.`);
 }
 
 await api.downloadBudget(budgetId);
@@ -44,7 +42,9 @@ const accountId = accounts[0].id;
 
 // Find or create a dedicated E2E test expense category (never reuse an arbitrary existing one)
 const allCategories = await api.getCategories();
-const existingCategory = allCategories.find((c) => c.name === "E2E Test Expenses" && c.group_id && !c.is_income);
+const existingCategory = allCategories.find(
+  (c) => c.name === "E2E Test Expenses" && c.group_id && !c.is_income,
+);
 let categoryId;
 if (existingCategory) {
   categoryId = existingCategory.id;
@@ -54,13 +54,20 @@ if (existingCategory) {
   const groupId = existingGroup
     ? existingGroup.id
     : await api.createCategoryGroup({ name: "E2E Test", is_income: false, hidden: false });
-  categoryId = await api.createCategory({ name: "E2E Test Expenses", group_id: groupId, is_income: false, hidden: false });
+  categoryId = await api.createCategory({
+    name: "E2E Test Expenses",
+    group_id: groupId,
+    is_income: false,
+    hidden: false,
+  });
 }
 
 // Find or create a dedicated E2E test payee (never reuse an arbitrary existing one)
 const allPayees = await api.getPayees();
 const existingPayee = allPayees.find((p) => p.name === "E2E Test Payee");
-const payeeId = existingPayee ? existingPayee.id : await api.createPayee({ name: "E2E Test Payee" });
+const payeeId = existingPayee
+  ? existingPayee.id
+  : await api.createPayee({ name: "E2E Test Payee" });
 
 await api.shutdown();
 

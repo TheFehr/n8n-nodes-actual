@@ -70,7 +70,9 @@ describe("bindingsShim", () => {
     expect(result).toEqual({ ok: true });
     const [requestedPath] = nativeRequire.mock.calls[0];
     expect(String(requestedPath)).toMatch(
-      new RegExp(`vendor\\${sep}better-sqlite3\\${sep}linux-x64-glibc\\${sep}better_sqlite3\\.node$`),
+      new RegExp(
+        `vendor\\${sep}better-sqlite3\\${sep}linux-x64-glibc\\${sep}better_sqlite3\\.node$`,
+      ),
     );
   });
 
@@ -82,7 +84,9 @@ describe("bindingsShim", () => {
 
     const [requestedPath] = nativeRequire.mock.calls[0];
     expect(String(requestedPath)).toMatch(
-      new RegExp(`vendor\\${sep}better-sqlite3\\${sep}linux-x64-musl\\${sep}better_sqlite3\\.node$`),
+      new RegExp(
+        `vendor\\${sep}better-sqlite3\\${sep}linux-x64-musl\\${sep}better_sqlite3\\.node$`,
+      ),
     );
   });
 

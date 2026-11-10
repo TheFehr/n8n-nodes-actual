@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["*.md", "third_party/**", "vendor/**", "package-lock.json"]
+}

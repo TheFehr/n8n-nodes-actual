@@ -28,7 +28,11 @@ const helpers = {
 
 const baseCreds = { url: "http://localhost:5006", password: "server-pw" };
 
-function makeExecute(creds: Record<string, unknown>, items = 1, extra: Record<string, unknown> = {}) {
+function makeExecute(
+  creds: Record<string, unknown>,
+  items = 1,
+  extra: Record<string, unknown> = {},
+) {
   return {
     getInputData: () => Array.from({ length: items }, () => ({ json: {} })),
     getNodeParameter: (name: string) =>
@@ -83,7 +87,9 @@ describe("ActualBudgetV3 execute", () => {
   });
 
   it("uses the plain downloadBudget call for a credential without an encryption password", async () => {
-    await new ActualBudgetV3().execute.call(makeExecute({ ...baseCreds, budgetId: "budget-plain" }));
+    await new ActualBudgetV3().execute.call(
+      makeExecute({ ...baseCreds, budgetId: "budget-plain" }),
+    );
     expect(actualApi.downloadBudget).toHaveBeenCalledWith("budget-plain");
   });
 
@@ -102,8 +108,8 @@ describe("ActualBudgetV3 execute", () => {
   });
 
   it("throws a clear NodeOperationError when the credential has no budgetId, before any network call", async () => {
-    const err = await new ActualBudgetV3()
-      .execute.call(makeExecute({ ...baseCreds, budgetId: "  " }))
+    const err = await new ActualBudgetV3().execute
+      .call(makeExecute({ ...baseCreds, budgetId: "  " }))
       .catch((e) => e);
     expect(err).toBeInstanceOf(NodeOperationError);
     expect(err.message).toMatch(/budget id/i);

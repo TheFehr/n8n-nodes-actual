@@ -32,15 +32,13 @@ vi.mock("@actual-app/api", () => ({
     { id: "acc-1", name: "Checking" },
     { id: "acc-2", name: "Savings" },
   ]),
-  getCategories: vi.fn().mockResolvedValue([
-    { id: "cat-1", name: "Groceries", group_id: "grp-1" },
-  ]),
-  getCategoryGroups: vi.fn().mockResolvedValue([
-    { id: "grp-1", name: "Food", categories: [{ id: "cat-1", name: "Groceries" }] },
-  ]),
-  getPayees: vi.fn().mockResolvedValue([
-    { id: "payee-1", name: "Landlord" },
-  ]),
+  getCategories: vi.fn().mockResolvedValue([{ id: "cat-1", name: "Groceries", group_id: "grp-1" }]),
+  getCategoryGroups: vi
+    .fn()
+    .mockResolvedValue([
+      { id: "grp-1", name: "Food", categories: [{ id: "cat-1", name: "Groceries" }] },
+    ]),
+  getPayees: vi.fn().mockResolvedValue([{ id: "payee-1", name: "Landlord" }]),
   createAccount: vi.fn().mockResolvedValue("acc-new"),
   updateAccount: vi.fn().mockResolvedValue(undefined),
   closeAccount: vi.fn().mockResolvedValue(undefined),
@@ -61,23 +59,51 @@ vi.mock("@actual-app/api", () => ({
   addTransactions: vi.fn().mockResolvedValue("ok"),
   updateTransaction: vi.fn().mockResolvedValue([{ id: "tx-001" }]),
   deleteTransaction: vi.fn().mockResolvedValue([{ id: "tx-001" }]),
-  getRules: vi.fn().mockResolvedValue([{ id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] }]),
-  getPayeeRules: vi.fn().mockResolvedValue([{ id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] }]),
-  createRule: vi.fn().mockResolvedValue({ id: "rule-new", stage: null, conditionsOp: "and", conditions: [], actions: [] }),
-  updateRule: vi.fn().mockResolvedValue({ id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] }),
+  getRules: vi
+    .fn()
+    .mockResolvedValue([
+      { id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] },
+    ]),
+  getPayeeRules: vi
+    .fn()
+    .mockResolvedValue([
+      { id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] },
+    ]),
+  createRule: vi
+    .fn()
+    .mockResolvedValue({
+      id: "rule-new",
+      stage: null,
+      conditionsOp: "and",
+      conditions: [],
+      actions: [],
+    }),
+  updateRule: vi
+    .fn()
+    .mockResolvedValue({
+      id: "rule-1",
+      stage: null,
+      conditionsOp: "and",
+      conditions: [],
+      actions: [],
+    }),
   deleteRule: vi.fn().mockResolvedValue(true),
   getSchedules: vi.fn().mockResolvedValue([{ id: "sched-1", name: "Rent" }]),
   createSchedule: vi.fn().mockResolvedValue("sched-new"),
   updateSchedule: vi.fn().mockResolvedValue("sched-1"),
   deleteSchedule: vi.fn().mockResolvedValue(undefined),
-  getTags: vi.fn().mockResolvedValue([{ id: "tag-1", tag: "#reimbursable", color: "", description: "" }]),
+  getTags: vi
+    .fn()
+    .mockResolvedValue([{ id: "tag-1", tag: "#reimbursable", color: "", description: "" }]),
   createTag: vi.fn().mockResolvedValue("tag-new"),
   updateTag: vi.fn().mockResolvedValue(undefined),
   deleteTag: vi.fn().mockResolvedValue(undefined),
   getNote: vi.fn().mockResolvedValue({ id: "acc-1", note: "Existing note" }),
   updateNote: vi.fn().mockResolvedValue(undefined),
   getBudgetMonths: vi.fn().mockResolvedValue(["2024-01", "2024-02", "2024-03"]),
-  getBudgets: vi.fn().mockResolvedValue([{ id: "file-1", name: "My Budget", cloudFileId: "cloud-1" }]),
+  getBudgets: vi
+    .fn()
+    .mockResolvedValue([{ id: "file-1", name: "My Budget", cloudFileId: "cloud-1" }]),
   getPreferences: vi.fn().mockResolvedValue({ dateFormat: "MM/dd/yyyy" }),
   getServerVersion: vi.fn().mockResolvedValue({ version: "25.0.0" }),
   setBudgetCarryover: vi.fn().mockResolvedValue(undefined),
@@ -437,8 +463,18 @@ describe("ActualBudget", () => {
       await node.execute.call(executeFunctions);
 
       expect(actualApi.getTransactions).toHaveBeenCalledTimes(2);
-      expect(actualApi.getTransactions).toHaveBeenNthCalledWith(1, "acc-1", "2024-01-01", "2024-01-31");
-      expect(actualApi.getTransactions).toHaveBeenNthCalledWith(2, "acc-2", "2024-02-01", "2024-02-29");
+      expect(actualApi.getTransactions).toHaveBeenNthCalledWith(
+        1,
+        "acc-1",
+        "2024-01-01",
+        "2024-01-31",
+      );
+      expect(actualApi.getTransactions).toHaveBeenNthCalledWith(
+        2,
+        "acc-2",
+        "2024-02-01",
+        "2024-02-29",
+      );
     });
 
     it("should call shutdown before re-throwing on getTransactions error", async () => {
@@ -701,7 +737,12 @@ describe("ActualBudget", () => {
 
       const result = await node.execute.call(executeFunctions);
 
-      expect(result[0][0].json).toEqual({ success: true, month: "2024-03", categoryId: "cat-abc", amount: 100000 });
+      expect(result[0][0].json).toEqual({
+        success: true,
+        month: "2024-03",
+        categoryId: "cat-abc",
+        amount: 100000,
+      });
     });
 
     it("should call setBudgetAmount once per input item", async () => {
@@ -1116,7 +1157,9 @@ describe("ActualBudget", () => {
 
       await node.execute.call(executeFunctions);
 
-      expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", { name: "Groceries & Household" });
+      expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", {
+        name: "Groceries & Household",
+      });
     });
 
     it("should call updateCategory with group_id and is_income together", async () => {
@@ -1131,7 +1174,10 @@ describe("ActualBudget", () => {
 
       await node.execute.call(executeFunctions);
 
-      expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", { group_id: "grp-2", is_income: true });
+      expect(actualApi.updateCategory).toHaveBeenCalledWith("cat-1", {
+        group_id: "grp-2",
+        is_income: true,
+      });
     });
 
     it("should call deleteCategory with the resolved category ID and transfer category", async () => {
@@ -1378,7 +1424,9 @@ describe("ActualBudget", () => {
         return undefined;
       });
 
-      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"rule" must be a JSON object/);
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        /"rule" must be a JSON object/,
+      );
       expect(actualApi.createRule).not.toHaveBeenCalled();
     });
 
@@ -1399,7 +1447,13 @@ describe("ActualBudget", () => {
     });
 
     it("should let the selected Rule ID win over a conflicting id in the rule JSON body", async () => {
-      const rule = { id: "rule-from-json-should-be-ignored", stage: null, conditionsOp: "and", conditions: [], actions: [] };
+      const rule = {
+        id: "rule-from-json-should-be-ignored",
+        stage: null,
+        conditionsOp: "and",
+        conditions: [],
+        actions: [],
+      };
       executeFunctions.getNodeParameter.mockImplementation((name: string) => {
         if (name === "operation") return "updateRule";
         if (name === "resource") return "rule";
@@ -1518,7 +1572,9 @@ describe("ActualBudget", () => {
         return undefined;
       });
 
-      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/Amount Lower.*Amount Upper/);
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        /Amount Lower.*Amount Upper/,
+      );
       expect(actualApi.createSchedule).not.toHaveBeenCalled();
     });
 
@@ -1563,7 +1619,8 @@ describe("ActualBudget", () => {
         if (name === "resource") return "schedule";
         if (name === "budgetId") return "test-budget-id";
         if (name === "scheduleId") return "sched-1";
-        if (name === "updateFields") return { amountOp: "isbetween", amountLower: -200000, amountUpper: -100000 };
+        if (name === "updateFields")
+          return { amountOp: "isbetween", amountLower: -200000, amountUpper: -100000 };
         if (name === "resetNextDate") return false;
         return undefined;
       });
@@ -1588,7 +1645,9 @@ describe("ActualBudget", () => {
         return undefined;
       });
 
-      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/Amount Lower.*Amount Upper/);
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        /Amount Lower.*Amount Upper/,
+      );
       expect(actualApi.updateSchedule).not.toHaveBeenCalled();
     });
 
@@ -1598,12 +1657,15 @@ describe("ActualBudget", () => {
         if (name === "resource") return "schedule";
         if (name === "budgetId") return "test-budget-id";
         if (name === "scheduleId") return "sched-1";
-        if (name === "updateFields") return { amountOp: "isbetween", amountLower: -100000, amountUpper: -200000 };
+        if (name === "updateFields")
+          return { amountOp: "isbetween", amountLower: -100000, amountUpper: -200000 };
         if (name === "resetNextDate") return false;
         return undefined;
       });
 
-      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/Amount Lower.*Amount Upper/);
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        /Amount Lower.*Amount Upper/,
+      );
       expect(actualApi.updateSchedule).not.toHaveBeenCalled();
     });
 
@@ -1774,7 +1836,9 @@ describe("ActualBudget", () => {
 
     beforeEach(() => {
       fakeQuery = createFakeQuery();
-      vi.mocked(actualApi.q).mockReturnValue(fakeQuery as unknown as ReturnType<typeof actualApi.q>);
+      vi.mocked(actualApi.q).mockReturnValue(
+        fakeQuery as unknown as ReturnType<typeof actualApi.q>,
+      );
     });
 
     it("should build the query from table/filter/select and call aqlQuery", async () => {
@@ -1879,7 +1943,9 @@ describe("ActualBudget", () => {
         return undefined;
       });
 
-      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"groupBy" must be a JSON array/);
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        /"groupBy" must be a JSON array/,
+      );
       expect(fakeQuery.groupBy).not.toHaveBeenCalled();
     });
 
@@ -1898,7 +1964,9 @@ describe("ActualBudget", () => {
         return undefined;
       });
 
-      await expect(node.execute.call(executeFunctions)).rejects.toThrow(/"orderBy" must be a JSON array/);
+      await expect(node.execute.call(executeFunctions)).rejects.toThrow(
+        /"orderBy" must be a JSON array/,
+      );
       expect(fakeQuery.orderBy).not.toHaveBeenCalled();
     });
 

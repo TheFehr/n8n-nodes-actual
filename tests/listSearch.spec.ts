@@ -30,11 +30,19 @@ vi.mock("@actual-app/api", () => ({
   ]),
 }));
 
-import { searchAccounts, searchPayees, searchCategories, searchCategoryGroups, searchTags } from "../nodes/ActualBudget/v2/methods/listSearch";
+import {
+  searchAccounts,
+  searchPayees,
+  searchCategories,
+  searchCategoryGroups,
+  searchTags,
+} from "../nodes/ActualBudget/v2/methods/listSearch";
 
 function makeLoadOptionsContext(budgetId: string): ILoadOptionsFunctions {
   return {
-    getCredentials: vi.fn().mockResolvedValue({ url: "http://localhost:5006", password: "test-password" }),
+    getCredentials: vi
+      .fn()
+      .mockResolvedValue({ url: "http://localhost:5006", password: "test-password" }),
     getNodeParameter: vi.fn().mockReturnValue(budgetId),
   } as unknown as ILoadOptionsFunctions;
 }

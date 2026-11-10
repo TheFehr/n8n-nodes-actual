@@ -25,9 +25,9 @@ vi.mock("@actual-app/api", () => ({
     totalBalance: 200000,
     categoryGroups: [],
   }),
-  getTransactions: vi.fn().mockResolvedValue([
-    { id: "tx-001", date: "2024-01-15", amount: -1000, account: "acc-1" },
-  ]),
+  getTransactions: vi
+    .fn()
+    .mockResolvedValue([{ id: "tx-001", date: "2024-01-15", amount: -1000, account: "acc-1" }]),
   setBudgetAmount: vi.fn().mockResolvedValue(undefined),
   shutdown: vi.fn().mockResolvedValue(undefined),
 }));
