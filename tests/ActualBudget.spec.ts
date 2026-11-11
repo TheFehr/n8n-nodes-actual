@@ -69,24 +69,20 @@ vi.mock("@actual-app/api", () => ({
     .mockResolvedValue([
       { id: "rule-1", stage: null, conditionsOp: "and", conditions: [], actions: [] },
     ]),
-  createRule: vi
-    .fn()
-    .mockResolvedValue({
-      id: "rule-new",
-      stage: null,
-      conditionsOp: "and",
-      conditions: [],
-      actions: [],
-    }),
-  updateRule: vi
-    .fn()
-    .mockResolvedValue({
-      id: "rule-1",
-      stage: null,
-      conditionsOp: "and",
-      conditions: [],
-      actions: [],
-    }),
+  createRule: vi.fn().mockResolvedValue({
+    id: "rule-new",
+    stage: null,
+    conditionsOp: "and",
+    conditions: [],
+    actions: [],
+  }),
+  updateRule: vi.fn().mockResolvedValue({
+    id: "rule-1",
+    stage: null,
+    conditionsOp: "and",
+    conditions: [],
+    actions: [],
+  }),
   deleteRule: vi.fn().mockResolvedValue(true),
   getSchedules: vi.fn().mockResolvedValue([{ id: "sched-1", name: "Rent" }]),
   createSchedule: vi.fn().mockResolvedValue("sched-new"),
