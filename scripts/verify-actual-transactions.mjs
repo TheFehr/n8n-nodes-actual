@@ -29,4 +29,6 @@ const e2eTxns = txns.filter((t) => t.notes && t.notes.startsWith("E2E test"));
 await api.shutdown();
 
 // Write JSON on its own line so callers can reliably extract it with `tail -1`
-process.stdout.write(JSON.stringify({ count: e2eTxns.length, txns: e2eTxns.map((t) => t.notes) }) + "\n");
+process.stdout.write(
+  JSON.stringify({ count: e2eTxns.length, txns: e2eTxns.map((t) => t.notes) }) + "\n",
+);

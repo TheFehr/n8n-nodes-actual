@@ -19,7 +19,10 @@ const ctx = await api.init({ serverURL, password, dataDir });
 let existing = (await api.getBudgets()).find((b) => b.name === budgetName);
 if (!existing) {
   await api.runImport(budgetName, async () => {
-    await api.createAccount({ name: "E2E Encrypted Checking", type: "checking", offbudget: false }, 0);
+    await api.createAccount(
+      { name: "E2E Encrypted Checking", type: "checking", offbudget: false },
+      0,
+    );
   });
   // The imported budget is now loaded and uploaded. Turn on E2E encryption for it, which
   // re-uploads the file encrypted with a key derived from the password.

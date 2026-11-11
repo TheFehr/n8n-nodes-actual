@@ -7,10 +7,10 @@
 let executionQueue: Promise<unknown> = Promise.resolve();
 
 export function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
-	const result = executionQueue.then(fn, fn);
-	executionQueue = result.then(
-		() => undefined,
-		() => undefined,
-	);
-	return result;
+  const result = executionQueue.then(fn, fn);
+  executionQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }

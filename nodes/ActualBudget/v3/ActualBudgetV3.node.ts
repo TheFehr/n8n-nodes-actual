@@ -1,9 +1,14 @@
-import { IExecuteFunctions, INodeExecutionData, INodeType, INodeTypeDescription } from 'n8n-workflow';
+import {
+  IExecuteFunctions,
+  INodeExecutionData,
+  INodeType,
+  INodeTypeDescription,
+} from "n8n-workflow";
 
-import { runExclusive } from '../executionQueue';
-import { ActualBudgetV2, runActualBudget } from '../v2/ActualBudgetV2.node';
-import { Credentials, requireCredentialBudgetId } from '../v2/GenericFunctions';
-import { listSearchV3 } from '../v2/methods/listSearch';
+import { runExclusive } from "../executionQueue";
+import { ActualBudgetV2, runActualBudget } from "../v2/ActualBudgetV2.node";
+import { Credentials, requireCredentialBudgetId } from "../v2/GenericFunctions";
+import { listSearchV3 } from "../v2/methods/listSearch";
 
 /**
  * Node version 3: identical to version 2 (same resources, operations and fields) except that
@@ -16,29 +21,29 @@ import { listSearchV3 } from '../v2/methods/listSearch';
 const v2Description = new ActualBudgetV2().description;
 
 export class ActualBudgetV3 implements INodeType {
-	description: INodeTypeDescription = {
-		...v2Description,
-		// Declared explicitly (rather than only inherited from V2) so they are statically visible.
-		// Same icon path as V2 - see the comment there for why it is relative to the wrapper.
-		// eslint-disable-next-line @n8n/community-nodes/icon-validation -- path is correct at runtime, see V2
-		icon: 'file:actualbudget.svg',
-		subtitle: '={{$parameter["operation"] + " " + $parameter["resource"]}}',
-		usableAsTool: undefined,
-		version: 3,
-		properties: v2Description.properties.filter((property) => property.name !== 'budgetId'),
-	};
+  description: INodeTypeDescription = {
+    ...v2Description,
+    // Declared explicitly (rather than only inherited from V2) so they are statically visible.
+    // Same icon path as V2 - see the comment there for why it is relative to the wrapper.
+    // eslint-disable-next-line @n8n/community-nodes/icon-validation -- path is correct at runtime, see V2
+    icon: "file:actualbudget.svg",
+    subtitle: '={{$parameter["operation"] + " " + $parameter["resource"]}}',
+    usableAsTool: undefined,
+    version: 3,
+    properties: v2Description.properties.filter((property) => property.name !== "budgetId"),
+  };
 
-	methods = {
-		listSearch: listSearchV3,
-	};
+  methods = {
+    listSearch: listSearchV3,
+  };
 
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const continueOnFail = this.continueOnFail();
-		// Fail fast on a credential without a Budget ID, before touching the network or the
-		// shared (serialized) Actual session.
-		const auth = (await this.getCredentials('actualBudgetApi', 0)) as Credentials;
-		const budgetId = requireCredentialBudgetId(this, auth);
-		// Same shared queue as V1/V2: @actual-app/api's session is a process-wide singleton.
-		return runExclusive(() => runActualBudget(this, continueOnFail, () => budgetId));
-	}
+  async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+    const continueOnFail = this.continueOnFail();
+    // Fail fast on a credential without a Budget ID, before touching the network or the
+    // shared (serialized) Actual session.
+    const auth = (await this.getCredentials("actualBudgetApi", 0)) as Credentials;
+    const budgetId = requireCredentialBudgetId(this, auth);
+    // Same shared queue as V1/V2: @actual-app/api's session is a process-wide singleton.
+    return runExclusive(() => runActualBudget(this, continueOnFail, () => budgetId));
+  }
 }

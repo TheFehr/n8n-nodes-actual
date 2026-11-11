@@ -24,7 +24,11 @@ vi.mock("@actual-app/api", () => ({
 import * as actualApi from "@actual-app/api";
 
 describe("ActualBudgetV1 / ActualBudgetV2 cross-version concurrency", () => {
-  const makeExecuteFunctions = (resource: "v1" | "transaction", budgetId: string, accountId: string) =>
+  const makeExecuteFunctions = (
+    resource: "v1" | "transaction",
+    budgetId: string,
+    accountId: string,
+  ) =>
     ({
       getInputData: () => [{ json: {} }],
       getNodeParameter: (name: string) => {

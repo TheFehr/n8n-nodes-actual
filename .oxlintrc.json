@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["third_party/**", "vendor/**"]
+}

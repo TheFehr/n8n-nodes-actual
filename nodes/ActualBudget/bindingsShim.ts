@@ -1,5 +1,5 @@
-import { join } from 'path';
-import { familySync, GLIBC, MUSL } from 'detect-libc';
+import { join } from "path";
+import { familySync, GLIBC, MUSL } from "detect-libc";
 
 // Community node packages can't declare native-addon runtime dependencies (see
 // no-runtime-dependencies lint rule), so better-sqlite3 can't be an npm dependency here.
@@ -23,19 +23,21 @@ export type NativeRequire = (path: string) => unknown;
 // tests can assert which path gets loaded without depending on a real, platform-matching
 // native addon.
 export default function bindings(_name?: string, nativeRequire: NativeRequire = require): unknown {
-	if (process.platform !== 'linux' || process.arch !== 'x64') {
-		throw new Error(
-			`No prebuilt better-sqlite3 binding is vendored for platform "${process.platform}" (arch "${process.arch}")`,
-		);
-	}
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    throw new Error(
+      `No prebuilt better-sqlite3 binding is vendored for platform "${process.platform}" (arch "${process.arch}")`,
+    );
+  }
 
-	const libc = familySync();
-	const variant = libc === MUSL ? 'linux-x64-musl' : libc === GLIBC ? 'linux-x64-glibc' : undefined;
-	if (!variant) {
-		throw new Error('Could not detect libc family (glibc/musl) to select a better-sqlite3 binding');
-	}
+  const libc = familySync();
+  const variant = libc === MUSL ? "linux-x64-musl" : libc === GLIBC ? "linux-x64-glibc" : undefined;
+  if (!variant) {
+    throw new Error("Could not detect libc family (glibc/musl) to select a better-sqlite3 binding");
+  }
 
-	// Compiled+bundled layout is dist/nodes/ActualBudget/ActualBudget.node.js; the vendor
-	// directory ships alongside dist at the package root (see package.json "files").
-	return nativeRequire(join(__dirname, '..', '..', '..', 'vendor', 'better-sqlite3', variant, 'better_sqlite3.node'));
+  // Compiled+bundled layout is dist/nodes/ActualBudget/ActualBudget.node.js; the vendor
+  // directory ships alongside dist at the package root (see package.json "files").
+  return nativeRequire(
+    join(__dirname, "..", "..", "..", "vendor", "better-sqlite3", variant, "better_sqlite3.node"),
+  );
 }

@@ -2,11 +2,11 @@
   "name": "n8n-nodes-actual",
   "version": "26.11.5",
   "description": "Interact with your Actual Budget instance",
-  "license": "MIT",
-  "homepage": "",
   "keywords": [
     "n8n-community-node-package"
   ],
+  "homepage": "",
+  "license": "MIT",
   "author": {
     "name": "Philipp Fehr",
     "email": "philipp@thefehr.me"
@@ -15,23 +15,43 @@
     "type": "git",
     "url": "git+https://github.com/TheFehr/n8n-nodes-actual.git"
   },
+  "files": [
+    "dist",
+    "vendor",
+    "THIRD-PARTY-NOTICES.md"
+  ],
   "scripts": {
     "build": "n8n-node build && node scripts/bundle.mjs",
     "build:watch": "tsc --watch",
     "dev": "n8n-node dev",
     "lint": "n8n-node lint",
     "lint:fix": "n8n-node lint --fix",
+    "lint:oxlint": "oxlint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
     "test": "vitest",
     "test:run": "vitest run",
     "test:pipeline": "bash scripts/full-test.sh",
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
-  "files": [
-    "dist",
-    "vendor",
-    "THIRD-PARTY-NOTICES.md"
-  ],
+  "devDependencies": {
+    "@actual-app/api": "26.11.0",
+    "@n8n/node-cli": "*",
+    "@types/node": "^25.5.2",
+    "detect-libc": "^2.1.2",
+    "esbuild": "^0.28.1",
+    "eslint": "9.39.5",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
+    "release-it": "^21.0.0",
+    "typescript": "5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": false,
@@ -42,23 +62,6 @@
       "dist/nodes/ActualBudget/ActualBudget.node.js"
     ]
   },
-  "devDependencies": {
-    "@actual-app/api": "26.11.0",
-    "@n8n/node-cli": "*",
-    "@types/node": "^25.5.2",
-    "detect-libc": "^2.1.2",
-    "esbuild": "^0.28.1",
-    "eslint": "9.39.5",
-    "prettier": "3.9.10",
-    "release-it": "^21.0.0",
-    "typescript": "5.9.3",
-    "vite": "^8.0.0",
-    "vitest": "^5.0.0"
-  },
-  "peerDependencies": {
-    "n8n-workflow": "*"
-  },
-  "n8nWorkflowVersion": "2.46.5",
   "n8nNodeTooling": {
     "upstream": {
       "name": "Actual",
@@ -90,5 +93,6 @@
         "from": "upstream"
       }
     }
-  }
+  },
+  "n8nWorkflowVersion": "2.46.5"
 }

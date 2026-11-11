@@ -213,7 +213,11 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     await api.downloadBudget(budgetId);
     const budgetMonth = await api.getBudgetMonth(testMonth);
     const category = budgetMonth.categoryGroups
-      .flatMap((g) => (g as Record<string, unknown> & { categories?: Record<string, unknown>[] }).categories ?? [])
+      .flatMap(
+        (g) =>
+          (g as Record<string, unknown> & { categories?: Record<string, unknown>[] }).categories ??
+          [],
+      )
       .find((c) => (c as Record<string, unknown>).id === categoryId);
     expect(category).toBeDefined();
     expect((category as Record<string, unknown>).budgeted).toBe(50000);
@@ -248,7 +252,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
 
     // The "should import transactions via the node" test imported a transaction on 2024-03-01
     expect(result[0].length).toBeGreaterThan(0);
-    const txn = result[0].find((item) => (item.json as Record<string, unknown>).notes === "Integration test transaction");
+    const txn = result[0].find(
+      (item) => (item.json as Record<string, unknown>).notes === "Integration test transaction",
+    );
     expect(txn).toBeDefined();
     expect((txn!.json as Record<string, unknown>).amount).toBe(-2500);
   }, 15000);
@@ -277,7 +283,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     const result = await runNode({ operation: "getBudgetMonths", resource: "budget" });
 
     expect(result[0].length).toBeGreaterThan(0);
-    expect(result[0].map((item) => (item.json as Record<string, unknown>).month)).toContain(testMonth);
+    expect(result[0].map((item) => (item.json as Record<string, unknown>).month)).toContain(
+      testMonth,
+    );
     expect(Object.keys(result[0][0].json as object)).toEqual(["month"]);
   }, 15000);
 
@@ -295,7 +303,11 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     await api.downloadBudget(budgetId);
     const budgetMonth = await api.getBudgetMonth(testMonth);
     const category = budgetMonth.categoryGroups
-      .flatMap((g) => (g as Record<string, unknown> & { categories?: Record<string, unknown>[] }).categories ?? [])
+      .flatMap(
+        (g) =>
+          (g as Record<string, unknown> & { categories?: Record<string, unknown>[] }).categories ??
+          [],
+      )
       .find((c) => (c as Record<string, unknown>).id === categoryId);
     expect((category as Record<string, unknown>).carryover).toBe(true);
   }, 30000);
@@ -351,14 +363,18 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     const ruleId = createdRule.id as string;
 
     const listResult = await runNode({ operation: "getRules", resource: "rule" });
-    expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(ruleId);
+    expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+      ruleId,
+    );
 
     const payeeRulesResult = await runNode({
       operation: "getPayeeRules",
       resource: "rule",
       payeeId,
     });
-    expect(payeeRulesResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(ruleId);
+    expect(payeeRulesResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+      ruleId,
+    );
 
     const updatedRule = { ...rule, stage: "pre" };
     await runNode({
@@ -377,7 +393,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     await runNode({ operation: "deleteRule", resource: "rule", ruleId });
 
     const finalListResult = await runNode({ operation: "getRules", resource: "rule" });
-    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(ruleId);
+    expect(
+      finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+    ).not.toContain(ruleId);
   }, 30000);
 
   it("should create, list, update, and delete a schedule via the node", async () => {
@@ -402,7 +420,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
 
     try {
       const listResult = await runNode({ operation: "getSchedules", resource: "schedule" });
-      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(scheduleId);
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+        scheduleId,
+      );
 
       const updatedName = `${scheduleName} Updated`;
       await runNode({
@@ -423,7 +443,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     }
 
     const finalListResult = await runNode({ operation: "getSchedules", resource: "schedule" });
-    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(scheduleId);
+    expect(
+      finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+    ).not.toContain(scheduleId);
   }, 30000);
 
   it("should create, list, update, and delete a tag via the node", async () => {
@@ -451,12 +473,16 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     const updatedEntry = afterUpdateResult[0].find(
       (item) => (item.json as Record<string, unknown>).id === tagId,
     );
-    expect((updatedEntry!.json as Record<string, unknown>).description).toBe("E2E test tag updated");
+    expect((updatedEntry!.json as Record<string, unknown>).description).toBe(
+      "E2E test tag updated",
+    );
 
     await runNode({ operation: "deleteTag", resource: "tag", tagId });
 
     const finalListResult = await runNode({ operation: "getTags", resource: "tag" });
-    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(tagId);
+    expect(
+      finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+    ).not.toContain(tagId);
   }, 30000);
 
   it("should set, get, and clear a note attached to an entity via the node", async () => {
@@ -468,12 +494,20 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     });
     expect(setResult[0][0].json).toMatchObject({ success: true, note: "E2E test note" });
 
-    const getResult = await runNode({ operation: "getNote", resource: "note", entityId: accountId });
+    const getResult = await runNode({
+      operation: "getNote",
+      resource: "note",
+      entityId: accountId,
+    });
     expect((getResult[0][0].json as Record<string, unknown>).note).toBe("E2E test note");
 
     await runNode({ operation: "updateNote", resource: "note", entityId: accountId, note: "" });
 
-    const clearedResult = await runNode({ operation: "getNote", resource: "note", entityId: accountId });
+    const clearedResult = await runNode({
+      operation: "getNote",
+      resource: "note",
+      entityId: accountId,
+    });
     const clearedNote = (clearedResult[0][0].json as Record<string, unknown>).note;
     expect(clearedNote === "" || clearedNote === null).toBe(true);
   }, 30000);
@@ -492,7 +526,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
 
     try {
       const listResult = await runNode({ operation: "getAccounts", resource: "account" });
-      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(newAccountId);
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+        newAccountId,
+      );
 
       const balanceResult = await runNode({
         operation: "getAccountBalance",
@@ -531,7 +567,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     }
 
     const finalListResult = await runNode({ operation: "getAccounts", resource: "account" });
-    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(newAccountId);
+    expect(
+      finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+    ).not.toContain(newAccountId);
   }, 30000);
 
   it("should create, list, update, and delete a category group via the node", async () => {
@@ -547,8 +585,13 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     expect(groupId).toBeDefined();
 
     try {
-      const listResult = await runNode({ operation: "getCategoryGroups", resource: "categoryGroup" });
-      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(groupId);
+      const listResult = await runNode({
+        operation: "getCategoryGroups",
+        resource: "categoryGroup",
+      });
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+        groupId,
+      );
 
       await runNode({
         operation: "updateCategoryGroup",
@@ -557,7 +600,10 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
         updateFields: { name: `${groupName} Updated` },
       });
 
-      const afterUpdateResult = await runNode({ operation: "getCategoryGroups", resource: "categoryGroup" });
+      const afterUpdateResult = await runNode({
+        operation: "getCategoryGroups",
+        resource: "categoryGroup",
+      });
       const updatedEntry = afterUpdateResult[0].find(
         (item) => (item.json as Record<string, unknown>).id === groupId,
       );
@@ -571,8 +617,13 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       });
     }
 
-    const finalListResult = await runNode({ operation: "getCategoryGroups", resource: "categoryGroup" });
-    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(groupId);
+    const finalListResult = await runNode({
+      operation: "getCategoryGroups",
+      resource: "categoryGroup",
+    });
+    expect(
+      finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+    ).not.toContain(groupId);
   }, 30000);
 
   it("should create, list, update, and delete a category via the node", async () => {
@@ -601,7 +652,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
 
       try {
         const listResult = await runNode({ operation: "getCategories", resource: "category" });
-        expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(newCategoryId);
+        expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+          newCategoryId,
+        );
 
         await runNode({
           operation: "updateCategory",
@@ -610,11 +663,16 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
           updateFields: { name: `${categoryName} Updated` },
         });
 
-        const afterUpdateResult = await runNode({ operation: "getCategories", resource: "category" });
+        const afterUpdateResult = await runNode({
+          operation: "getCategories",
+          resource: "category",
+        });
         const updatedEntry = afterUpdateResult[0].find(
           (item) => (item.json as Record<string, unknown>).id === newCategoryId,
         );
-        expect((updatedEntry!.json as Record<string, unknown>).name).toBe(`${categoryName} Updated`);
+        expect((updatedEntry!.json as Record<string, unknown>).name).toBe(
+          `${categoryName} Updated`,
+        );
       } finally {
         await runNode({
           operation: "deleteCategory",
@@ -625,9 +683,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
       }
 
       const finalListResult = await runNode({ operation: "getCategories", resource: "category" });
-      expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(
-        newCategoryId,
-      );
+      expect(
+        finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+      ).not.toContain(newCategoryId);
     } finally {
       await runNode({
         operation: "deleteCategoryGroup",
@@ -650,7 +708,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
 
     try {
       const listResult = await runNode({ operation: "getPayees", resource: "payee" });
-      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(newPayeeId);
+      expect(listResult[0].map((item) => (item.json as Record<string, unknown>).id)).toContain(
+        newPayeeId,
+      );
 
       await runNode({
         operation: "updatePayee",
@@ -672,7 +732,9 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     }
 
     const finalListResult = await runNode({ operation: "getPayees", resource: "payee" });
-    expect(finalListResult[0].map((item) => (item.json as Record<string, unknown>).id)).not.toContain(newPayeeId);
+    expect(
+      finalListResult[0].map((item) => (item.json as Record<string, unknown>).id),
+    ).not.toContain(newPayeeId);
   }, 30000);
 
   it("should merge a duplicate payee into a target payee via the node", async () => {
@@ -782,7 +844,10 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
     }, 30000);
 
     it("imports transactions into the encrypted budget with the right password", async () => {
-      const result = await runE2ee({ encryptionPassword: e2eePassword }, importParams("E2EE import"));
+      const result = await runE2ee(
+        { encryptionPassword: e2eePassword },
+        importParams("E2EE import"),
+      );
       const output = result[0][0].json as Record<string, unknown>;
       expect((output.errors as unknown[]).length).toBe(0);
       expect((output.added as unknown[]).length).toBeGreaterThan(0);
@@ -860,13 +925,17 @@ describe.skipIf(!runIntegration)("ActualBudget Integration", () => {
 
     it("writes to and reads from the plain budget via its credential", async () => {
       const res = await runV3(plainCred, importOp(accountId, "V3 plain"));
-      expect(((res[0][0].json as Record<string, unknown>).added as unknown[]).length).toBeGreaterThan(0);
+      expect(
+        ((res[0][0].json as Record<string, unknown>).added as unknown[]).length,
+      ).toBeGreaterThan(0);
       expect(notesOf(await runV3(plainCred, readOp(accountId)))).toContain("V3 plain");
     }, 30000);
 
     it("writes to and reads from the encrypted budget via its credential", async () => {
       const res = await runV3(encryptedCred, importOp(e2eeAccountId, "V3 encrypted"));
-      expect(((res[0][0].json as Record<string, unknown>).added as unknown[]).length).toBeGreaterThan(0);
+      expect(
+        ((res[0][0].json as Record<string, unknown>).added as unknown[]).length,
+      ).toBeGreaterThan(0);
       expect(notesOf(await runV3(encryptedCred, readOp(e2eeAccountId)))).toContain("V3 encrypted");
     }, 30000);
 
