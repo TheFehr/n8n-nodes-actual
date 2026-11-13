@@ -38,7 +38,7 @@ Existing workflows keep working: nodes saved with version 1 or 2 still take the 
 ## Compatibility
 
 <!-- n8n-node-tooling:compatibility -->
-Last tested with n8n 2.47.5 and Actual 26.11.0.
+Last tested with n8n 2.47.6 and Actual 26.11.0.
 <!-- /n8n-node-tooling:compatibility -->
 
 ## Versioning
