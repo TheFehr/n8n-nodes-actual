@@ -41,7 +41,7 @@
     "@types/node": "^25.5.2",
     "detect-libc": "^2.1.2",
     "esbuild": "^0.28.1",
-    "eslint": "9.39.5",
+    "eslint": "10.14.0",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "release-it": "^21.0.0",
