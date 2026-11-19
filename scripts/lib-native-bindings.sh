@@ -27,7 +27,9 @@ MUSL_IMAGE="n8nio/n8n:latest"
 resolve_node_major() {
 	local cid version
 	cid=$(docker create "$MUSL_IMAGE") || return 1
-	version=$(docker export "$cid" | tar -xO usr/bin/node | strings | grep -oP '^v\K\d+\.\d+\.\d+$' | head -1)
+	# The binary lives at usr/local/bin/node; usr/bin/node is only a symlink
+	# in current images, so extract the real path (and fall back to the old one).
+	version=$(docker export "$cid" | tar -xO usr/local/bin/node usr/bin/node 2>/dev/null | strings | grep -oP '^v\K\d+\.\d+\.\d+$' | head -1)
 	docker rm "$cid" >/dev/null
 	if [ -z "$version" ]; then
 		echo "resolve_node_major: failed to read a version string from ${MUSL_IMAGE}" >&2
