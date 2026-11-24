@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-actual",
-  "version": "26.11.13",
+  "version": "26.11.14",
   "description": "Interact with your Actual Budget instance",
   "keywords": [
     "n8n-community-node-package"
